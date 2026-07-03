@@ -1,11 +1,37 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { downloadBlob } from "@/lib/download";
+import type { PageRasterizer, PageRasterizerFactory } from "@/pdf/rasterize";
 import { PageNumbersFailedError, type ProgressCallback } from "@/pdf/types";
 import { PageNumbers, PDF_VALIDATION } from "@/routes/PageNumbers";
 import type { PdfClient } from "@/workers/pdfClient";
+
+// jsdom no implementa object URLs; el panel de vista previa las usa al rasterizar.
+beforeEach(() => {
+  URL.createObjectURL = vi.fn(() => "blob:mock") as typeof URL.createObjectURL;
+  URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL;
+});
+
+/** Rasterizador falso (sin pdf.js) que registra qué páginas se rasterizan. */
+function mockRasterizer(pageCount = 3): {
+  factory: PageRasterizerFactory;
+  rendered: number[];
+} {
+  const rendered: number[] = [];
+  const rasterizer: PageRasterizer = {
+    pageCount: () => pageCount,
+    renderPage: (index) => {
+      rendered.push(index);
+      return Promise.resolve(
+        new Blob([new Uint8Array([1])], { type: "image/png" }),
+      );
+    },
+    destroy: () => {},
+  };
+  return { factory: async () => rasterizer, rendered };
+}
 
 vi.mock("@/lib/download", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/download")>();
@@ -66,17 +92,43 @@ function fakeClient(addPageNumbers: PdfClient["addPageNumbers"]): PdfClient {
         },
       };
     },
+    async protect() {
+      return new Uint8Array();
+    },
+    async annotate() {
+      return new Uint8Array();
+    },
+    async sign() {
+      return new Uint8Array();
+    },
+    async detectForm() {
+      return { hasFields: false, fields: [] };
+    },
+    async fillForms() {
+      return new Uint8Array();
+    },
+    async ocr() {
+      return { text: "" };
+    },
     dispose() {
       // no-op
     },
   };
 }
 
-function renderAt(client: PdfClient) {
+function renderAt(
+  client: PdfClient,
+  createRasterizer: PageRasterizerFactory = mockRasterizer().factory,
+) {
   return render(
     <MemoryRouter initialEntries={["/numeros-pagina"]}>
       <Routes>
-        <Route path="/numeros-pagina" element={<PageNumbers client={client} />} />
+        <Route
+          path="/numeros-pagina"
+          element={
+            <PageNumbers client={client} createRasterizer={createRasterizer} />
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -228,5 +280,47 @@ describe("PageNumbers — numeración (R43, R44, R45, R46, R47)", () => {
     expect(
       screen.queryByRole("button", { name: "Descargar" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("PageNumbers — vista previa en vivo (R26, R29)", () => {
+  it("ajustar opciones NO invoca addPageNumbers; solo el botón lo hace (R26)", async () => {
+    const addPageNumbers = vi.fn(async () => new Uint8Array([9]));
+    const { container } = renderAt(fakeClient(addPageNumbers));
+
+    addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
+
+    // Ajustes de opciones: ninguno debe ensamblar el PDF final.
+    fireEvent.change(screen.getByLabelText("Posición"), {
+      target: { value: "top-right" },
+    });
+    fireEvent.change(screen.getByLabelText("Formato"), {
+      target: { value: "page-n" },
+    });
+    fireEvent.change(screen.getByLabelText("Número de inicio"), {
+      target: { value: "5" },
+    });
+    expect(addPageNumbers).not.toHaveBeenCalled();
+
+    // Solo el botón de confirmar ensambla el PDF.
+    fireEvent.click(screen.getByRole("button", { name: "Añadir números" }));
+    await waitFor(() => expect(addPageNumbers).toHaveBeenCalledTimes(1));
+  });
+
+  it("monta LivePreview con pageIndex = 0 cuando hay PDF cargado (R29)", async () => {
+    const raster = mockRasterizer(4);
+    const client = fakeClient(async () => new Uint8Array([9]));
+    const { container } = renderAt(client, raster.factory);
+
+    addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
+
+    // Panel de vista previa presente con un PDF cargado.
+    expect(
+      screen.getByRole("region", { name: "Vista previa del resultado" }),
+    ).toBeInTheDocument();
+
+    // Solo se rasteriza la página de índice 0.
+    await waitFor(() => expect(raster.rendered).toContain(0));
+    expect(raster.rendered.every((index) => index === 0)).toBe(true);
   });
 });

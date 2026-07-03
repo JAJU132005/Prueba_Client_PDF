@@ -1,11 +1,20 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { PageRangeSelector } from "@/components/PageRangeSelector";
 import { Dropzone } from "@/components/Dropzone";
+import { ResourceCostNote } from "@/components/ResourceCostNote";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
   type FileValidationConfig,
 } from "@/lib/fileValidation";
+import { pdfjsPageCount } from "@/lib/pdfjsPageCounter";
+import { countPdfPages, type PageCounter } from "@/pdf/pageCount";
+import {
+  createSelection,
+  toRangeSpec,
+  type PageSelectionState,
+} from "@/pdf/pageSelection";
 import { createPdfClient, isPdfWorkerError, type PdfClient } from "@/workers/pdfClient";
 
 type Status = "idle" | "processing" | "done" | "error";
@@ -36,23 +45,70 @@ function messageForError(error: unknown): string {
 export interface SplitPdfProps {
   /** Cliente inyectable (tests). Por defecto se crea uno con worker real. */
   client?: PdfClient;
+  /** Contador de páginas inyectable (tests). Por defecto `pdfjsPageCount`. */
+  countPages?: PageCounter;
 }
 
-export function SplitPdf({ client }: SplitPdfProps = {}): JSX.Element {
+export function SplitPdf({ client, countPages }: SplitPdfProps = {}): JSX.Element {
   // Se crea el cliente (y su worker) una sola vez; si se inyecta, se reutiliza.
   const pdfClient = useMemo(() => client ?? createPdfClient(), [client]);
+  const counter = countPages ?? pdfjsPageCount;
 
   const [files, setFiles] = useState<File[]>([]);
-  const [rangeSpec, setRangeSpec] = useState("");
+  const [pageCount, setPageCount] = useState(0);
+  const [selection, setSelection] = useState<PageSelectionState | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // El botón se habilita solo con un PDF y un rango no vacío. La validación real
-  // del rango la hace el dominio en el worker. (R34)
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  // El botón se habilita solo con un PDF y una selección no vacía; `toRangeSpec`
+  // devuelve "" cuando no hay páginas. La validación real la hace el dominio. (R34)
+  const rangeSpec = selection ? toRangeSpec(selection) : "";
   const canSplit =
     files.length > 0 && rangeSpec.trim() !== "" && status !== "processing";
+
+  async function loadPageCount(file: File): Promise<void> {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const buffer = await file.arrayBuffer();
+    const result = await countPdfPages(
+      new Uint8Array(buffer),
+      counter,
+      controller.signal,
+    );
+    if (controller.signal.aborted) return;
+    if (result.status === "counted") {
+      setPageCount(result.pages);
+      setSelection(createSelection(result.pages));
+    } else {
+      setPageCount(0);
+      setSelection(null);
+    }
+  }
+
+  function handleFilesChange(next: File[]): void {
+    abortRef.current?.abort();
+    setFiles(next);
+    setPageCount(0);
+    setSelection(null);
+    setStatus("idle");
+    setProgress(0);
+    setResultBlob(null);
+    setErrorMessage(null);
+    if (next.length > 0) {
+      void loadPageCount(next[0]);
+    }
+  }
 
   async function handleSplit(): Promise<void> {
     if (files.length === 0 || rangeSpec.trim() === "") {
@@ -87,8 +143,10 @@ export function SplitPdf({ client }: SplitPdfProps = {}): JSX.Element {
   }
 
   function handleReset(): void {
+    abortRef.current?.abort();
     setFiles([]);
-    setRangeSpec("");
+    setPageCount(0);
+    setSelection(null);
     setStatus("idle");
     setProgress(0);
     setResultBlob(null);
@@ -107,38 +165,35 @@ export function SplitPdf({ client }: SplitPdfProps = {}): JSX.Element {
           </span>
         </div>
         <p className="max-w-2xl text-base text-text-muted">
-          Extrae páginas concretas de un PDF indicando rangos (por ejemplo
-          1-3,5). Tu archivo se procesa en tu navegador y nunca se sube a ningún
-          servidor.
+          Elige visualmente las páginas a extraer: haz clic en las que quieras o
+          usa los atajos. Tu archivo se procesa en tu navegador y nunca se sube a
+          ningún servidor.
         </p>
+        <ResourceCostNote toolId="split" />
       </header>
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
           files={files}
-          onFilesChange={setFiles}
+          onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
           label="Arrastra tu PDF o haz clic para seleccionar"
         />
 
-        <div className="flex flex-col gap-2">
-          <label
-            htmlFor="range-spec"
-            className="text-sm font-medium text-text"
-          >
-            Páginas a extraer
-          </label>
-          <input
-            id="range-spec"
-            type="text"
-            value={rangeSpec}
-            onChange={(event) => setRangeSpec(event.target.value)}
-            placeholder="1-3,5"
-            aria-label="Rangos de páginas a extraer"
-            className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          />
-        </div>
+        {selection && pageCount > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-text">
+              Páginas a extraer
+            </span>
+            <PageRangeSelector
+              pageCount={pageCount}
+              value={selection}
+              onChange={setSelection}
+              showAdvanced
+            />
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <button

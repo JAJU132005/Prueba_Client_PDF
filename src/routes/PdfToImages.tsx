@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
+import { PageRangeSelector } from "@/components/PageRangeSelector";
 import { Dropzone } from "@/components/Dropzone";
+import { ResourceCostNote } from "@/components/ResourceCostNote";
 import { downloadBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -8,6 +10,12 @@ import {
 } from "@/lib/fileValidation";
 import { createPdfjsPageRasterizer } from "@/lib/pdfjsPageRasterizer";
 import { createZipBlob } from "@/lib/zip";
+import {
+  createSelection,
+  resolvePages,
+  toPageSelection,
+  type PageSelectionState,
+} from "@/pdf/pageSelection";
 import {
   IMAGE_FORMATS,
   imageFileName,
@@ -57,6 +65,7 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
 
   const [files, setFiles] = useState<File[]>([]);
   const [pageCount, setPageCount] = useState(0);
+  const [selection, setSelection] = useState<PageSelectionState | null>(null);
   const [format, setFormat] = useState<ImageFormat>("png");
   const [resolution, setResolution] = useState<ImageResolution>("medium");
   const [pages, setPages] = useState<RasterizedPage[]>([]);
@@ -89,7 +98,9 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
       // Crea el rasterizador (pdf.js parsea en su propio worker). (R27)
       const rasterizer = await createRasterizer(input);
       rasterizerRef.current = rasterizer;
-      setPageCount(rasterizer.pageCount());
+      const count = rasterizer.pageCount();
+      setPageCount(count);
+      setSelection(createSelection(count));
     } catch {
       // No se pudo abrir el PDF: mensaje de error y sin descargas. (R34)
       setErrorMessage("No se pudo abrir el PDF.");
@@ -102,6 +113,7 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
     teardownRasterizer();
     setFiles(next);
     setPageCount(0);
+    setSelection(null);
     setPages([]);
     setStatus("idle");
     setProgress(0);
@@ -127,11 +139,20 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
         scale: scaleForResolution(resolution),
         quality: JPEG_QUALITY,
       };
+      // Solo se exportan las páginas resueltas por el selector; el filtrado
+      // ocurre en la capa UI para no cambiar la firma de `rasterizePages`. (R27)
+      const selectedSet = new Set(
+        selection ? resolvePages(toPageSelection(selection), pageCount) : [],
+      );
       // Render incremental, página a página, cancelable. (R30, R40)
       await rasterizePages(
         rasterizer,
         options,
-        (page) => setPages((prev) => [...prev, page]),
+        (page) => {
+          if (selectedSet.has(page.index)) {
+            setPages((prev) => [...prev, page]);
+          }
+        },
         controller.signal,
         (p) => setProgress(p),
       );
@@ -164,7 +185,11 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
     downloadBlob(zip, "imagenes.zip");
   }
 
-  const canConvert = pageCount > 0 && status !== "processing";
+  const canConvert =
+    pageCount > 0 &&
+    selection !== null &&
+    toPageSelection(selection) !== "" &&
+    status !== "processing";
 
   return (
     <section className="py-8">
@@ -182,6 +207,7 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
           una a una o todas juntas en un ZIP. Tu archivo se procesa en tu
           navegador y nunca se sube a ningún servidor.
         </p>
+        <ResourceCostNote toolId="pdf-to-images" />
       </header>
 
       <div className="mt-8 flex flex-col gap-6">
@@ -238,6 +264,19 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
                 ))}
               </select>
             </div>
+
+            {selection && (
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium text-text">
+                  Páginas a convertir
+                </span>
+                <PageRangeSelector
+                  pageCount={pageCount}
+                  value={selection}
+                  onChange={setSelection}
+                />
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-3">
               <button

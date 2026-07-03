@@ -23,7 +23,11 @@ export async function createPdfjsThumbnailRenderer(
 ): Promise<ThumbnailRenderer> {
   // El parseo pesado corre en el worker de pdf.js; aquí solo esperamos su
   // promesa. Si falla, el `await` rechaza y no se produce miniatura. (R38, R42)
-  const doc = await pdfjs.getDocument({ data: input }).promise;
+  // pdf.js transfiere el ArrayBuffer de `data` a su worker, dejándolo detached
+  // en el llamante. Clonamos (`slice()`) para no detachar el buffer del llamante
+  // y evitar que esos bytes queden inservibles para una exportación posterior.
+  // Defensa en profundidad frente a la causa raíz del bug #16. (R4)
+  const doc = await pdfjs.getDocument({ data: input.slice() }).promise;
 
   return {
     pageCount(): number {

@@ -3,6 +3,10 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { downloadBlob } from "@/lib/download";
+import {
+  RESOURCE_COST_EXPLANATION,
+  RESOURCE_COST_LABEL,
+} from "@/lib/resourceCost";
 import type { CompressOptions, CompressPdfResult } from "@/pdf/compressPdf";
 import { CompressFailedError, type ProgressCallback } from "@/pdf/types";
 import { CompressPdf, PDF_VALIDATION } from "@/routes/CompressPdf";
@@ -70,6 +74,24 @@ function fakeClient(compress: PdfClient["compress"]): PdfClient {
       return new Uint8Array();
     },
     compress,
+    async protect() {
+      return new Uint8Array();
+    },
+    async annotate() {
+      return new Uint8Array();
+    },
+    async sign() {
+      return new Uint8Array();
+    },
+    async detectForm() {
+      return { hasFields: false, fields: [] };
+    },
+    async fillForms() {
+      return new Uint8Array();
+    },
+    async ocr() {
+      return { text: "" };
+    },
     dispose() {
       // no-op
     },
@@ -102,6 +124,14 @@ describe("CompressPdf — estructura (R26, R27, R28)", () => {
   it("valida la extensión .pdf y el MIME application/pdf (R27)", () => {
     expect(PDF_VALIDATION.allowedExtensions).toEqual([".pdf"]);
     expect(PDF_VALIDATION.allowedMimeTypes).toEqual(["application/pdf"]);
+  });
+
+  it("renderiza la nota de consumo 'Pesada' con su frase explicativa (R7)", () => {
+    renderAt(fakeClient(async () => result()));
+    expect(screen.getByText(RESOURCE_COST_LABEL.heavy)).toBeInTheDocument();
+    expect(
+      screen.getByText(RESOURCE_COST_EXPLANATION.heavy),
+    ).toBeInTheDocument();
   });
 
   it("ofrece un control de nivel con las opciones low/medium/high (R28)", () => {

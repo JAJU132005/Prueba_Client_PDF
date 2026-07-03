@@ -1,11 +1,29 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { PageRangeSelector } from "@/components/PageRangeSelector";
 import { Dropzone } from "@/components/Dropzone";
+import { ResourceCostNote } from "@/components/ResourceCostNote";
+import { LivePreview } from "@/components/LivePreview";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
   type FileValidationConfig,
 } from "@/lib/fileValidation";
+import { pdfjsPageCount } from "@/lib/pdfjsPageCounter";
+import { countPdfPages, type PageCounter } from "@/pdf/pageCount";
+import {
+  createSelection,
+  toPageSelection,
+  type PageSelectionState,
+} from "@/pdf/pageSelection";
+import {
+  buildWatermarkOverlay,
+  resolvePreviewPageIndex,
+  type ContentSize,
+  type PreviewOverlay,
+  type PreviewPageSize,
+} from "@/pdf/previewModel";
+import type { PageRasterizerFactory } from "@/pdf/rasterize";
 import {
   DEFAULT_WATERMARK_ANGLE,
   DEFAULT_WATERMARK_FONT_SIZE,
@@ -13,6 +31,7 @@ import {
   WATERMARK_MODES,
   WATERMARK_POSITIONS,
   type WatermarkMode,
+  type WatermarkOptions,
   type WatermarkPosition,
 } from "@/pdf/watermark";
 import {
@@ -22,7 +41,6 @@ import {
 } from "@/workers/pdfClient";
 
 type Status = "idle" | "processing" | "done" | "error";
-type PageMode = "all" | "subset";
 
 /** Validación de entrada del Dropzone del PDF: un único PDF. (R46, R47, R48) */
 export const PDF_VALIDATION: FileValidationConfig = {
@@ -79,13 +97,36 @@ function messageForError(error: unknown): string {
 export interface WatermarkProps {
   /** Cliente inyectable (tests). Por defecto se crea uno con worker real. (R62) */
   client?: PdfClient;
+  /** Contador de páginas inyectable (tests). Por defecto `pdfjsPageCount`. */
+  countPages?: PageCounter;
+  /**
+   * Factoría de rasterizador para la vista previa (tests). Por defecto la del
+   * panel `LivePreview` (`createPdfjsPageRasterizer`). No es una estructura de
+   * opciones de la herramienta; solo plumbing de render (R25b).
+   */
+  createRasterizer?: PageRasterizerFactory;
 }
 
-export function Watermark({ client }: WatermarkProps = {}): JSX.Element {
+/**
+ * Ancho aproximado del texto en puntos PDF para posicionar el overlay de la
+ * vista previa. Aproximación tipográfica (sin DOM); el modelo puro solo coloca.
+ */
+function approxTextWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * 0.6;
+}
+
+export function Watermark({
+  client,
+  countPages,
+  createRasterizer,
+}: WatermarkProps = {}): JSX.Element {
   // Se crea el cliente (y su worker) una sola vez; si se inyecta, se reutiliza.
   const pdfClient = useMemo(() => client ?? createPdfClient(), [client]);
+  const counter = countPages ?? pdfjsPageCount;
 
   const [files, setFiles] = useState<File[]>([]);
+  const [pageCount, setPageCount] = useState(0);
+  const [selection, setSelection] = useState<PageSelectionState | null>(null);
   const [mode, setMode] = useState<WatermarkMode>("text");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [text, setText] = useState("CONFIDENCIAL");
@@ -93,27 +134,132 @@ export function Watermark({ client }: WatermarkProps = {}): JSX.Element {
   const [position, setPosition] = useState<WatermarkPosition>("center");
   const [opacity, setOpacity] = useState(DEFAULT_WATERMARK_OPACITY);
   const [angle, setAngle] = useState(DEFAULT_WATERMARK_ANGLE);
-  const [pageMode, setPageMode] = useState<PageMode>("all");
-  const [rangeSpec, setRangeSpec] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Tamaño real de la página (puntos PDF) que reporta el panel al rasterizar, y
+  // tamaño intrínseco de la imagen de marca; ambos alimentan `previewModel`.
+  const [previewPageSize, setPreviewPageSize] =
+    useState<PreviewPageSize | null>(null);
+  const [imageSize, setImageSize] = useState<ContentSize | null>(null);
 
-  // El botón se habilita con un PDF; en modo imagen, con una imagen cargada; en
-  // modo subconjunto, con un rango no vacío. La validación real la hace el
-  // dominio en el worker.
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  // `toPageSelection` devuelve "all"/spec/"" según la selección; "" deshabilita.
+  const pages = selection ? toPageSelection(selection) : "";
+
+  // Página a previsualizar: la primera de la selección; "" → 0. (R28)
+  const previewPageIndex = resolvePreviewPageIndex(pages, pageCount);
+
+  // Carga el tamaño intrínseco de la imagen de marca para el overlay (modo
+  // imagen). En modo texto o sin imagen, no hay tamaño de imagen.
+  useEffect(() => {
+    if (mode !== "image" || imageFiles.length === 0) {
+      setImageSize(null);
+      return;
+    }
+    const url = URL.createObjectURL(imageFiles[0]);
+    const img = new Image();
+    img.onload = (): void => {
+      setImageSize({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.src = url;
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [mode, imageFiles]);
+
+  // Overlays de aproximación derivados de las opciones de dominio EXISTENTES
+  // (`WatermarkOptions`) mediante `previewModel`; sin estructuras nuevas. (R25a, R25b)
+  const overlays: PreviewOverlay[] = useMemo(() => {
+    if (!previewPageSize) {
+      return [];
+    }
+    const options: WatermarkOptions = {
+      mode,
+      text,
+      image: null,
+      position,
+      opacity,
+      angle,
+      fontSize,
+      pages: pages === "" ? "all" : pages,
+    };
+    const content: ContentSize | null =
+      mode === "image"
+        ? imageSize
+        : { width: approxTextWidth(text, fontSize), height: fontSize };
+    if (!content) {
+      return [];
+    }
+    return [buildWatermarkOverlay(options, previewPageSize, content)];
+  }, [
+    previewPageSize,
+    imageSize,
+    mode,
+    text,
+    position,
+    opacity,
+    angle,
+    fontSize,
+    pages,
+  ]);
+
+  // El botón se habilita con un PDF, una selección no vacía y, en modo imagen,
+  // con una imagen cargada. La validación real la hace el dominio en el worker.
   const canWatermark =
     files.length > 0 &&
+    pages !== "" &&
     !(mode === "image" && imageFiles.length === 0) &&
-    !(pageMode === "subset" && rangeSpec.trim() === "") &&
     status !== "processing";
+
+  async function loadPageCount(file: File): Promise<void> {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const buffer = await file.arrayBuffer();
+    const result = await countPdfPages(
+      new Uint8Array(buffer),
+      counter,
+      controller.signal,
+    );
+    if (controller.signal.aborted) return;
+    if (result.status === "counted") {
+      setPageCount(result.pages);
+      setSelection(createSelection(result.pages));
+    } else {
+      setPageCount(0);
+      setSelection(null);
+    }
+  }
+
+  function handleFilesChange(next: File[]): void {
+    abortRef.current?.abort();
+    setFiles(next);
+    setPageCount(0);
+    setSelection(null);
+    setStatus("idle");
+    setProgress(0);
+    setResultBlob(null);
+    setErrorMessage(null);
+    setPreviewPageSize(null);
+    if (next.length > 0) {
+      void loadPageCount(next[0]);
+    }
+  }
 
   async function handleWatermark(): Promise<void> {
     if (
       files.length === 0 ||
-      (mode === "image" && imageFiles.length === 0) ||
-      (pageMode === "subset" && rangeSpec.trim() === "")
+      pages === "" ||
+      (mode === "image" && imageFiles.length === 0)
     ) {
       return;
     }
@@ -140,7 +286,7 @@ export function Watermark({ client }: WatermarkProps = {}): JSX.Element {
           opacity,
           angle,
           fontSize,
-          pages: pageMode === "all" ? "all" : rangeSpec,
+          pages,
         },
         (p) => setProgress(p),
       );
@@ -160,7 +306,10 @@ export function Watermark({ client }: WatermarkProps = {}): JSX.Element {
   }
 
   function handleReset(): void {
+    abortRef.current?.abort();
     setFiles([]);
+    setPageCount(0);
+    setSelection(null);
     setMode("text");
     setImageFiles([]);
     setText("CONFIDENCIAL");
@@ -168,12 +317,12 @@ export function Watermark({ client }: WatermarkProps = {}): JSX.Element {
     setPosition("center");
     setOpacity(DEFAULT_WATERMARK_OPACITY);
     setAngle(DEFAULT_WATERMARK_ANGLE);
-    setPageMode("all");
-    setRangeSpec("");
     setStatus("idle");
     setProgress(0);
     setResultBlob(null);
     setErrorMessage(null);
+    setPreviewPageSize(null);
+    setImageSize(null);
   }
 
   return (
@@ -192,12 +341,13 @@ export function Watermark({ client }: WatermarkProps = {}): JSX.Element {
           elijas, ajustando la opacidad, el ángulo y la posición. Tu archivo se
           procesa en tu navegador y nunca se sube a ningún servidor.
         </p>
+        <ResourceCostNote toolId="watermark" />
       </header>
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
           files={files}
-          onFilesChange={setFiles}
+          onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
           label="Arrastra tu PDF o haz clic para seleccionar"
@@ -336,44 +486,29 @@ export function Watermark({ client }: WatermarkProps = {}): JSX.Element {
           />
         </div>
 
-        <fieldset className="flex flex-col gap-2">
-          <legend className="text-sm font-medium text-text">
-            Páginas a marcar
-          </legend>
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-text">
-              <input
-                type="radio"
-                name="watermark-page-mode"
-                value="all"
-                checked={pageMode === "all"}
-                onChange={() => setPageMode("all")}
-              />
-              Todas las páginas
-            </label>
-            <label className="flex items-center gap-2 text-sm text-text">
-              <input
-                type="radio"
-                name="watermark-page-mode"
-                value="subset"
-                checked={pageMode === "subset"}
-                onChange={() => setPageMode("subset")}
-              />
-              Solo algunas
-            </label>
-          </div>
-          {pageMode === "subset" && (
-            <input
-              id="watermark-range"
-              type="text"
-              value={rangeSpec}
-              onChange={(event) => setRangeSpec(event.target.value)}
-              placeholder="1-3,5"
-              aria-label="Rangos de páginas a marcar"
-              className="mt-1 w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        {selection && pageCount > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-text">
+              Páginas a marcar
+            </span>
+            <PageRangeSelector
+              pageCount={pageCount}
+              value={selection}
+              onChange={setSelection}
+              showAdvanced
             />
-          )}
-        </fieldset>
+          </div>
+        )}
+
+        {files.length > 0 && (
+          <LivePreview
+            file={files[0]}
+            pageIndex={previewPageIndex}
+            overlays={overlays}
+            onPageSize={setPreviewPageSize}
+            createRasterizer={createRasterizer}
+          />
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <button

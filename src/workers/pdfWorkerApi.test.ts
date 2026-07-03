@@ -2,17 +2,22 @@ import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 
 import { mergePdfs } from "@/pdf/merge";
+import type { OcrEngine } from "@/pdf/ocrPdf";
 import { organizePdf } from "@/pdf/organize";
 import { probe } from "@/pdf/probe";
 import { rotatePdf } from "@/pdf/rotate";
+import { signPdf } from "@/pdf/signature";
 import { splitPdf } from "@/pdf/split";
+import type { PdfCryptoEngine } from "@/pdf/protectPdf";
 import {
+  AnnotateFailedError,
   InvalidPageOrderError,
   InvalidPdfError,
   InvalidRangeError,
   InvalidRotationError,
   OrganizeFailedError,
   ProbeFailedError,
+  SignFailedError,
 } from "@/pdf/types";
 import { createPdfWorkerApi } from "@/workers/pdfWorkerApi";
 
@@ -22,6 +27,18 @@ async function makePdf(n: number): Promise<Uint8Array> {
     doc.addPage([100, 100]);
   }
   return doc.save();
+}
+
+/** PNG 1×1 válido e incrustable por pdf-lib (transparente). */
+function makePng1x1(): Uint8Array {
+  const base64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAen63NgAAAAASUVORK5CYII=";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 describe("createPdfWorkerApi", () => {
@@ -216,5 +233,152 @@ describe("createPdfWorkerApi", () => {
     await expect(
       api.compress(invalid, { level: "medium" }),
     ).rejects.toBeInstanceOf(InvalidPdfError);
+  });
+
+  it("protect delega en protectPdf con el motor inyectado (R16)", async () => {
+    const expected = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    let calls = 0;
+    const fakeEngine: PdfCryptoEngine = {
+      async encrypt() {
+        calls++;
+        return expected;
+      },
+      async decrypt() {
+        return new Uint8Array();
+      },
+    };
+    const api = createPdfWorkerApi(async () => new Uint8Array([1]), fakeEngine);
+    const result = await api.protect(new Uint8Array([1, 2]), {
+      mode: "protect",
+      password: "secreta",
+    });
+    expect(calls).toBe(1);
+    expect(result).toBe(expected);
+  });
+
+  it("annotate delega en flattenAnnotations y conserva las páginas (R22, R23)", async () => {
+    const api = createPdfWorkerApi();
+    const pdf2 = await makePdf(2);
+    const viaApi = await api.annotate(pdf2, [
+      {
+        id: "a",
+        pageIndex: 0,
+        kind: "rect",
+        at: { x: 10, y: 10 },
+        width: 20,
+        height: 20,
+        color: { r: 0, g: 0, b: 0 },
+        thickness: 1,
+      },
+    ]);
+    const out = await PDFDocument.load(viaApi);
+    expect(out.getPageCount()).toBe(2);
+  });
+
+  it("annotate propaga AnnotateFailedError ante lista vacía (R31)", async () => {
+    const api = createPdfWorkerApi();
+    const pdf2 = await makePdf(2);
+    await expect(api.annotate(pdf2, [])).rejects.toBeInstanceOf(
+      AnnotateFailedError,
+    );
+  });
+
+  it("annotate propaga InvalidPdfError ante bytes no-PDF (R28)", async () => {
+    const api = createPdfWorkerApi();
+    const invalid = new Uint8Array([0x68, 0x69]);
+    await expect(
+      api.annotate(invalid, [
+        {
+          id: "a",
+          pageIndex: 0,
+          kind: "text",
+          at: { x: 1, y: 1 },
+          text: "x",
+          fontSize: 12,
+          color: { r: 0, g: 0, b: 0 },
+        },
+      ]),
+    ).rejects.toBeInstanceOf(InvalidPdfError);
+  });
+
+  it("sign delega en signPdf y produce el mismo resultado (R10)", async () => {
+    const api = createPdfWorkerApi();
+    const pdf2 = await makePdf(2);
+    const png = makePng1x1();
+    const options = {
+      pageIndex: 1,
+      position: "center" as const,
+      widthPts: 40,
+      image: png,
+    };
+
+    const viaApi = await api.sign(pdf2, options);
+    const viaDomain = await signPdf(pdf2, options);
+
+    const outApi = await PDFDocument.load(viaApi);
+    const outDomain = await PDFDocument.load(viaDomain);
+    expect(outApi.getPageCount()).toBe(2);
+    expect(outApi.getPageCount()).toBe(outDomain.getPageCount());
+  });
+
+  it("sign propaga SignFailedError ante pageIndex fuera de rango (R10)", async () => {
+    const api = createPdfWorkerApi();
+    const pdf2 = await makePdf(2);
+    await expect(
+      api.sign(pdf2, {
+        pageIndex: 9,
+        position: "center",
+        widthPts: 40,
+        image: makePng1x1(),
+      }),
+    ).rejects.toBeInstanceOf(SignFailedError);
+  });
+
+  it("protect con contraseña vacía → ProtectFailedError sin tocar el motor (R17)", async () => {
+    let touched = false;
+    const fakeEngine: PdfCryptoEngine = {
+      async encrypt() {
+        touched = true;
+        return new Uint8Array();
+      },
+      async decrypt() {
+        touched = true;
+        return new Uint8Array();
+      },
+    };
+    const api = createPdfWorkerApi(async () => new Uint8Array([1]), fakeEngine);
+    await expect(
+      api.protect(new Uint8Array([1]), { mode: "protect", password: "" }),
+    ).rejects.toMatchObject({ name: "ProtectFailedError" });
+    expect(touched).toBe(false);
+  });
+
+  it("ocr delega en ocrImages con el motor inyectado y resuelve su texto (R21, R22)", async () => {
+    const fakeOcrEngine: OcrEngine = {
+      async recognize() {
+        return { text: "TEXTO DEL MOTOR FALSO", words: [] };
+      },
+      async terminate() {
+        // no-op
+      },
+    };
+    const api = createPdfWorkerApi(
+      async () => new Uint8Array([1]),
+      {
+        async encrypt() {
+          return new Uint8Array();
+        },
+        async decrypt() {
+          return new Uint8Array();
+        },
+      },
+      fakeOcrEngine,
+    );
+    const result = await api.ocr(
+      [{ bytes: new Uint8Array([0x89, 0x50]), mimeType: "image/png" }],
+      { language: "spa", output: "text" },
+    );
+    expect(result.text).toBe("TEXTO DEL MOTOR FALSO");
+    expect(result.pdfBytes).toBeUndefined();
   });
 });

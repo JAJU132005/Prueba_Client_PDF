@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { Dropzone } from "@/components/Dropzone";
+import { ResourceCostNote } from "@/components/ResourceCostNote";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -129,6 +130,7 @@ export function CompressPdf({ client }: CompressPdfProps = {}): JSX.Element {
           fingirlo. Tu archivo se procesa en tu navegador y nunca se sube a
           ningún servidor.
         </p>
+        <ResourceCostNote toolId="compress" />
       </header>
 
       <div className="mt-8 flex flex-col gap-6">

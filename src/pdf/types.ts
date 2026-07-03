@@ -133,3 +133,80 @@ export class CompressFailedError extends PdfWorkerError {
     this.name = "CompressFailedError";
   }
 }
+
+/**
+ * El aplanado de anotaciones no puede completarse: la lista de anotaciones está
+ * vacía o alguna referencia un índice de página fuera del rango del documento.
+ * (R30, R31)
+ */
+export class AnnotateFailedError extends PdfWorkerError {
+  constructor(message = "No se pudo aplanar las anotaciones en el PDF.") {
+    super(message);
+    this.name = "AnnotateFailedError";
+  }
+}
+
+/** La contraseña aportada para desbloquear el PDF es incorrecta. (R13) */
+export class IncorrectPasswordError extends PdfWorkerError {
+  constructor(message = "La contraseña es incorrecta.") {
+    super(message);
+    this.name = "IncorrectPasswordError";
+  }
+}
+
+/**
+ * Proteger/desbloquear no puede completarse: la contraseña está vacía o el modo
+ * no es válido. (R2, R3)
+ */
+export class ProtectFailedError extends PdfWorkerError {
+  constructor(message = "No se pudo proteger o desbloquear el PDF.") {
+    super(message);
+    this.name = "ProtectFailedError";
+  }
+}
+
+/**
+ * Firmar (firma visual) no puede completarse: `pageIndex` fuera del rango del
+ * documento o `widthPts` no finito o menor o igual que 0. (R5, R8)
+ */
+export class SignFailedError extends PdfWorkerError {
+  constructor(message = "No se pudo firmar el PDF.") {
+    super(message);
+    this.name = "SignFailedError";
+  }
+}
+
+/**
+ * Rellenar el formulario no puede completarse: un relleno referencia un campo
+ * inexistente, o una opción de radio/dropdown fuera de las opciones del campo.
+ * (R12, R13)
+ */
+export class FillFormFailedError extends PdfWorkerError {
+  constructor(message = "No se pudo rellenar el formulario.") {
+    super(message);
+    this.name = "FillFormFailedError";
+  }
+}
+
+/**
+ * El OCR no puede completarse: la lista de páginas está vacía o el idioma
+ * solicitado no pertenece a `OCR_LANGUAGES`. (R7, R8, R25)
+ */
+export class OcrFailedError extends PdfWorkerError {
+  constructor(message = "No se pudo reconocer el texto del PDF.") {
+    super(message);
+    this.name = "OcrFailedError";
+  }
+}
+
+/**
+ * La redacción no puede completarse: no se proporcionó ninguna página redactada,
+ * o alguna referencia un índice de página fuera del rango del documento o
+ * repetido. (R12, R13)
+ */
+export class RedactFailedError extends PdfWorkerError {
+  constructor(message = "No se pudo redactar el PDF.") {
+    super(message);
+    this.name = "RedactFailedError";
+  }
+}

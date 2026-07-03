@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { downloadBlob } from "@/lib/download";
+import type { PageCounter } from "@/pdf/pageCount";
+import type { PageRasterizer, PageRasterizerFactory } from "@/pdf/rasterize";
 import { WatermarkFailedError, type ProgressCallback } from "@/pdf/types";
 import type { WatermarkOptions } from "@/pdf/watermark";
 import {
@@ -11,6 +13,36 @@ import {
   Watermark,
 } from "@/routes/Watermark";
 import type { PdfClient } from "@/workers/pdfClient";
+
+// jsdom no implementa object URLs; el panel de vista previa las usa al rasterizar.
+beforeEach(() => {
+  URL.createObjectURL = vi.fn(() => "blob:mock") as typeof URL.createObjectURL;
+  URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL;
+});
+
+/** Rasterizador falso (sin pdf.js) que registra qué páginas se rasterizan. */
+function mockRasterizer(pageCount = 3): {
+  factory: PageRasterizerFactory;
+  rendered: number[];
+} {
+  const rendered: number[] = [];
+  const rasterizer: PageRasterizer = {
+    pageCount: () => pageCount,
+    renderPage: (index) => {
+      rendered.push(index);
+      return Promise.resolve(
+        new Blob([new Uint8Array([1])], { type: "image/png" }),
+      );
+    },
+    destroy: () => {},
+  };
+  return { factory: async () => rasterizer, rendered };
+}
+
+/** Contador de páginas falso (sin pdf.js): devuelve un número fijo. */
+function fakeCounter(pages: number): PageCounter {
+  return async () => pages;
+}
 
 vi.mock("@/lib/download", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/download")>();
@@ -79,17 +111,48 @@ function fakeClient(addWatermark: PdfClient["addWatermark"]): PdfClient {
         },
       };
     },
+    async protect() {
+      return new Uint8Array();
+    },
+    async annotate() {
+      return new Uint8Array();
+    },
+    async sign() {
+      return new Uint8Array();
+    },
+    async detectForm() {
+      return { hasFields: false, fields: [] };
+    },
+    async fillForms() {
+      return new Uint8Array();
+    },
+    async ocr() {
+      return { text: "" };
+    },
     dispose() {
       // no-op
     },
   };
 }
 
-function renderAt(client: PdfClient) {
+function renderAt(
+  client: PdfClient,
+  counter: PageCounter = fakeCounter(3),
+  createRasterizer: PageRasterizerFactory = mockRasterizer().factory,
+) {
   return render(
     <MemoryRouter initialEntries={["/marca-agua"]}>
       <Routes>
-        <Route path="/marca-agua" element={<Watermark client={client} />} />
+        <Route
+          path="/marca-agua"
+          element={
+            <Watermark
+              client={client}
+              countPages={counter}
+              createRasterizer={createRasterizer}
+            />
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -181,14 +244,12 @@ describe("Watermark — estructura (R45, R46, R47, R48, R49, R50, R51, R52, R53,
     expect(fontSize.type).toBe("number");
   });
 
-  it("ofrece un control de selección de páginas todas/subconjunto (R55)", () => {
-    renderAt(fakeClient(async () => new Uint8Array([1])));
-    expect(
-      screen.getByRole("radio", { name: "Todas las páginas" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("radio", { name: "Solo algunas" }),
-    ).toBeInTheDocument();
+  it("tras añadir un PDF ofrece el selector visual de páginas (R55)", async () => {
+    const { container } = renderAt(fakeClient(async () => new Uint8Array([1])));
+    addPdf(container, makePdfFile("a.pdf", [1, 2, 3]));
+    await screen.findByRole("button", { name: "Página 1" });
+    expect(screen.getByRole("button", { name: "Todas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pares" })).toBeInTheDocument();
   });
 });
 
@@ -204,6 +265,7 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     const { container } = renderAt(client);
 
     addPdf(container, makePdfFile("a.pdf", [1, 2, 3]));
+    await screen.findByRole("button", { name: "Página 1" });
     fireEvent.change(screen.getByLabelText("Texto de la marca"), {
       target: { value: "BORRADOR" },
     });
@@ -236,25 +298,24 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     });
   });
 
-  it("en modo subconjunto pasa el rango como pages (R55, R56)", async () => {
+  it("con un subconjunto seleccionado pasa la spec como pages (R55, R56)", async () => {
     let capturedOptions: WatermarkOptions | undefined;
     const client = fakeClient(async (_input, options) => {
       capturedOptions = options;
       return new Uint8Array([9]);
     });
-    const { container } = renderAt(client);
+    const { container } = renderAt(client, fakeCounter(3));
 
     addPdf(container, makePdfFile("a.pdf", [1]));
-    fireEvent.click(screen.getByRole("radio", { name: "Solo algunas" }));
-    fireEvent.change(screen.getByLabelText("Rangos de páginas a marcar"), {
-      target: { value: "1-3,5" },
-    });
+    await screen.findByRole("button", { name: "Página 1" });
+    // Deselecciona la página 3 → pages esperado "1-2".
+    fireEvent.click(screen.getByRole("button", { name: "Página 3" }));
     fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
 
     await waitFor(() => {
       expect(capturedOptions).toBeDefined();
     });
-    expect(capturedOptions?.pages).toBe("1-3,5");
+    expect(capturedOptions?.pages).toBe("1-2");
   });
 
   it("en modo imagen invoca addWatermark con mode image e image no nulo (R57)", async () => {
@@ -266,6 +327,7 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     const { container } = renderAt(client);
 
     addPdf(container, makePdfFile("a.pdf", [1]));
+    await screen.findByRole("button", { name: "Página 1" });
     fireEvent.change(screen.getByLabelText("Modo de marca"), {
       target: { value: "image" },
     });
@@ -290,6 +352,7 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     const { container } = renderAt(client);
 
     addPdf(container, makePdfFile("a.pdf", [1]));
+    await screen.findByRole("button", { name: "Página 1" });
     fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
 
     const bar = await screen.findByRole("progressbar");
@@ -305,6 +368,7 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     const { container } = renderAt(client);
 
     addPdf(container, makePdfFile("a.pdf", [1]));
+    await screen.findByRole("button", { name: "Página 1" });
     fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
 
     const download = await screen.findByRole("button", { name: "Descargar" });
@@ -323,6 +387,7 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     const { container } = renderAt(client);
 
     addPdf(container, makePdfFile("a.pdf", [1]));
+    await screen.findByRole("button", { name: "Página 1" });
     fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
 
     const alert = await screen.findByRole("alert");
@@ -330,5 +395,52 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     expect(
       screen.queryByRole("button", { name: "Descargar" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("Watermark — vista previa en vivo (R26, R28)", () => {
+  it("ajustar opciones NO invoca addWatermark; solo «Añadir marca» lo hace (R26)", async () => {
+    const addWatermark = vi.fn(async () => new Uint8Array([9]));
+    const { container } = renderAt(fakeClient(addWatermark));
+
+    addPdf(container, makePdfFile("a.pdf", [1, 2, 3]));
+    await screen.findByRole("button", { name: "Página 1" });
+
+    // Ajustes de opciones: ninguno debe ensamblar el PDF final.
+    fireEvent.change(screen.getByLabelText("Texto de la marca"), {
+      target: { value: "BORRADOR" },
+    });
+    fireEvent.change(screen.getByLabelText("Opacidad"), {
+      target: { value: "0.5" },
+    });
+    fireEvent.change(screen.getByLabelText("Ángulo de rotación"), {
+      target: { value: "20" },
+    });
+    fireEvent.change(screen.getByLabelText("Posición"), {
+      target: { value: "top-right" },
+    });
+    expect(addWatermark).not.toHaveBeenCalled();
+
+    // Solo el botón de confirmar ensambla el PDF.
+    fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
+    await waitFor(() => expect(addWatermark).toHaveBeenCalledTimes(1));
+  });
+
+  it("monta LivePreview con pageIndex = resolvePreviewPageIndex(selección, pageCount) (R28)", async () => {
+    const raster = mockRasterizer(3);
+    const client = fakeClient(async () => new Uint8Array([9]));
+    const { container } = renderAt(client, fakeCounter(3), raster.factory);
+
+    addPdf(container, makePdfFile("a.pdf", [1, 2, 3]));
+    await screen.findByRole("button", { name: "Página 1" });
+
+    // Panel de vista previa presente con un PDF cargado.
+    expect(
+      screen.getByRole("region", { name: "Vista previa del resultado" }),
+    ).toBeInTheDocument();
+
+    // Deselecciona la página 1 → primera seleccionada es la 2 → pageIndex 1.
+    fireEvent.click(screen.getByRole("button", { name: "Página 1" }));
+    await waitFor(() => expect(raster.rendered).toContain(1));
   });
 });

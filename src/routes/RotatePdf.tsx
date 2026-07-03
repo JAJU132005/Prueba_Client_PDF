@@ -1,17 +1,25 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { PageRangeSelector } from "@/components/PageRangeSelector";
 import { Dropzone } from "@/components/Dropzone";
+import { ResourceCostNote } from "@/components/ResourceCostNote";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
   type FileValidationConfig,
 } from "@/lib/fileValidation";
+import { pdfjsPageCount } from "@/lib/pdfjsPageCounter";
+import { countPdfPages, type PageCounter } from "@/pdf/pageCount";
+import {
+  createSelection,
+  toPageSelection,
+  type PageSelectionState,
+} from "@/pdf/pageSelection";
 import type { RotateOptions } from "@/pdf/rotateOptions";
 import { createPdfClient, isPdfWorkerError, type PdfClient } from "@/workers/pdfClient";
 
 type Status = "idle" | "processing" | "done" | "error";
 type Angle = 90 | 180 | 270;
-type Mode = "all" | "subset";
 
 const PDF_VALIDATION: FileValidationConfig = {
   allowedExtensions: [".pdf"],
@@ -43,30 +51,74 @@ function messageForError(error: unknown): string {
 export interface RotatePdfProps {
   /** Cliente inyectable (tests). Por defecto se crea uno con worker real. */
   client?: PdfClient;
+  /** Contador de páginas inyectable (tests). Por defecto `pdfjsPageCount`. */
+  countPages?: PageCounter;
 }
 
-export function RotatePdf({ client }: RotatePdfProps = {}): JSX.Element {
+export function RotatePdf({ client, countPages }: RotatePdfProps = {}): JSX.Element {
   // Se crea el cliente (y su worker) una sola vez; si se inyecta, se reutiliza.
   const pdfClient = useMemo(() => client ?? createPdfClient(), [client]);
+  const counter = countPages ?? pdfjsPageCount;
 
   const [files, setFiles] = useState<File[]>([]);
+  const [pageCount, setPageCount] = useState(0);
+  const [selection, setSelection] = useState<PageSelectionState | null>(null);
   const [angle, setAngle] = useState<Angle>(90);
-  const [mode, setMode] = useState<Mode>("all");
-  const [rangeSpec, setRangeSpec] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // El botón se habilita con un PDF y, en modo subconjunto, un rango no vacío. La
-  // validación real (ángulo y rango) la hace el dominio en el worker. (R37)
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  // `toPageSelection` devuelve "" cuando no hay páginas seleccionadas. (R37)
+  const pages = selection ? toPageSelection(selection) : "";
   const canRotate =
-    files.length > 0 &&
-    !(mode === "subset" && rangeSpec.trim() === "") &&
-    status !== "processing";
+    files.length > 0 && pages !== "" && status !== "processing";
+
+  async function loadPageCount(file: File): Promise<void> {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const buffer = await file.arrayBuffer();
+    const result = await countPdfPages(
+      new Uint8Array(buffer),
+      counter,
+      controller.signal,
+    );
+    if (controller.signal.aborted) return;
+    if (result.status === "counted") {
+      setPageCount(result.pages);
+      setSelection(createSelection(result.pages));
+    } else {
+      setPageCount(0);
+      setSelection(null);
+    }
+  }
+
+  function handleFilesChange(next: File[]): void {
+    abortRef.current?.abort();
+    setFiles(next);
+    setPageCount(0);
+    setSelection(null);
+    setAngle(90);
+    setStatus("idle");
+    setProgress(0);
+    setResultBlob(null);
+    setErrorMessage(null);
+    if (next.length > 0) {
+      void loadPageCount(next[0]);
+    }
+  }
 
   async function handleRotate(): Promise<void> {
-    if (files.length === 0 || (mode === "subset" && rangeSpec.trim() === "")) {
+    if (files.length === 0 || pages === "") {
       return;
     }
     setStatus("processing");
@@ -77,10 +129,7 @@ export function RotatePdf({ client }: RotatePdfProps = {}): JSX.Element {
     try {
       // Lee los bytes del PDF y delega la rotación en el worker. (R38)
       const buffer = await files[0].arrayBuffer();
-      const options: RotateOptions = {
-        angle,
-        pages: mode === "all" ? "all" : rangeSpec,
-      };
+      const options: RotateOptions = { angle, pages };
       const bytes = await pdfClient.rotate(
         new Uint8Array(buffer),
         options,
@@ -102,10 +151,11 @@ export function RotatePdf({ client }: RotatePdfProps = {}): JSX.Element {
   }
 
   function handleReset(): void {
+    abortRef.current?.abort();
     setFiles([]);
+    setPageCount(0);
+    setSelection(null);
     setAngle(90);
-    setMode("all");
-    setRangeSpec("");
     setStatus("idle");
     setProgress(0);
     setResultBlob(null);
@@ -127,12 +177,13 @@ export function RotatePdf({ client }: RotatePdfProps = {}): JSX.Element {
           Gira todas las páginas o solo las que elijas en múltiplos de 90°. Tu
           archivo se procesa en tu navegador y nunca se sube a ningún servidor.
         </p>
+        <ResourceCostNote toolId="rotate" />
       </header>
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
           files={files}
-          onFilesChange={setFiles}
+          onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
           label="Arrastra tu PDF o haz clic para seleccionar"
@@ -157,44 +208,19 @@ export function RotatePdf({ client }: RotatePdfProps = {}): JSX.Element {
           </select>
         </div>
 
-        <fieldset className="flex flex-col gap-2">
-          <legend className="text-sm font-medium text-text">
-            Páginas a rotar
-          </legend>
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-text">
-              <input
-                type="radio"
-                name="rotate-mode"
-                value="all"
-                checked={mode === "all"}
-                onChange={() => setMode("all")}
-              />
-              Todas las páginas
-            </label>
-            <label className="flex items-center gap-2 text-sm text-text">
-              <input
-                type="radio"
-                name="rotate-mode"
-                value="subset"
-                checked={mode === "subset"}
-                onChange={() => setMode("subset")}
-              />
-              Solo algunas
-            </label>
-          </div>
-          {mode === "subset" && (
-            <input
-              id="rotate-range"
-              type="text"
-              value={rangeSpec}
-              onChange={(event) => setRangeSpec(event.target.value)}
-              placeholder="1-3,5"
-              aria-label="Rangos de páginas a rotar"
-              className="mt-1 w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        {selection && pageCount > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-text">
+              Páginas a rotar
+            </span>
+            <PageRangeSelector
+              pageCount={pageCount}
+              value={selection}
+              onChange={setSelection}
+              showAdvanced
             />
-          )}
-        </fieldset>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <button
@@ -205,11 +231,9 @@ export function RotatePdf({ client }: RotatePdfProps = {}): JSX.Element {
           >
             Rotar
           </button>
-          {(files.length === 0 ||
-            (mode === "subset" && rangeSpec.trim() === "")) && (
+          {(files.length === 0 || pages === "") && (
             <span className="text-sm text-text-muted">
-              Selecciona un PDF
-              {mode === "subset" ? " e indica las páginas a rotar." : "."}
+              Selecciona un PDF e indica las páginas a rotar.
             </span>
           )}
         </div>

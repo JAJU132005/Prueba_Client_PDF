@@ -28,6 +28,7 @@ export function Home(): JSX.Element {
             to={tool.path}
             icon={tool.icon}
             category={tool.category}
+            resourceCost={tool.resourceCost}
           />
         ))}
       </section>

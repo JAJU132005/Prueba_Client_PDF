@@ -44,6 +44,22 @@ function makeRenderer(
   };
 }
 
+/**
+ * Factoría de renderer falsa que DETACHA el `ArrayBuffer` del `input` recibido,
+ * simulando lo que hace pdf.js al transferir los bytes a su worker en
+ * `getDocument({ data })`. Tras el detach, el buffer del llamante queda con
+ * `byteLength === 0`. Reproduce la causa raíz del bug #16.
+ */
+function makeDetachingRenderer(
+  pageCount: number,
+): (input: Uint8Array) => Promise<ThumbnailRenderer> {
+  return async (input: Uint8Array) => {
+    // Transferir el ArrayBuffer lo deja detached en el hilo principal.
+    structuredClone(input.buffer, { transfer: [input.buffer] });
+    return makeRenderer(pageCount);
+  };
+}
+
 /** Cliente falso que captura la llamada a organize y devuelve bytes fijos. */
 function fakeClient(organize: PdfClient["organize"]): PdfClient {
   return {
@@ -81,6 +97,24 @@ function fakeClient(organize: PdfClient["organize"]): PdfClient {
           minimalReduction: true,
         },
       };
+    },
+    async protect() {
+      return new Uint8Array();
+    },
+    async annotate() {
+      return new Uint8Array();
+    },
+    async sign() {
+      return new Uint8Array();
+    },
+    async detectForm() {
+      return { hasFields: false, fields: [] };
+    },
+    async fillForms() {
+      return new Uint8Array();
+    },
+    async ocr() {
+      return { text: "" };
     },
     dispose() {
       // no-op
@@ -276,6 +310,99 @@ describe("OrganizePages", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("No se pudo abrir el PDF");
     expect(screen.queryAllByRole("img")).toHaveLength(0);
+  });
+
+  it("conserva los bytes de exportación íntegros aunque el renderer detache el buffer (R1)", async () => {
+    let capturedInput: Uint8Array | undefined;
+    const client = fakeClient(async (input) => {
+      capturedInput = input;
+      return new Uint8Array([9]);
+    });
+    const { container } = renderPage(client, makeDetachingRenderer(3));
+    addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
+    await screen.findAllByRole("img");
+
+    // Reordena (página 1 al final) y elimina la página 2 antes de exportar.
+    const items = container.querySelectorAll('[data-testid^="page-"]');
+    fireEvent.dragStart(items[0]);
+    fireEvent.drop(items[2]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Marcar la página 2 para eliminar" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+
+    await waitFor(() => {
+      expect(capturedInput).toBeDefined();
+    });
+    // Con el bug, el buffer está detached → byteLength 0. Con el fix, íntegro.
+    expect(capturedInput?.byteLength).toBe(3);
+    expect(capturedInput && Array.from(capturedInput)).toEqual([1, 2, 3]);
+  });
+
+  it("tras reordenar y eliminar, exportar ofrece Descargar sin el error genérico (R2, R7)", async () => {
+    const client = fakeClient(async () => new Uint8Array([0xab, 0xcd]));
+    const { container } = renderPage(client, makeDetachingRenderer(3));
+    addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
+    await screen.findAllByRole("img");
+
+    const items = container.querySelectorAll('[data-testid^="page-"]');
+    fireEvent.dragStart(items[0]);
+    fireEvent.drop(items[2]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Marcar la página 2 para eliminar" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+
+    const download = await screen.findByRole("button", { name: "Descargar" });
+    fireEvent.click(download);
+
+    expect(downloadBlob).toHaveBeenCalledTimes(1);
+    const blob = vi.mocked(downloadBlob).mock.calls[0][0];
+    const buffer = await blob.arrayBuffer();
+    expect(Array.from(new Uint8Array(buffer))).toEqual([0xab, 0xcd]);
+    expect(
+      screen.queryByText(
+        "Ocurrió un error inesperado al organizar el PDF.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("deriva la selección del modelo y la escribe con applySelection (R28)", async () => {
+    let capturedOrder: readonly number[] | undefined;
+    const client = fakeClient(async (_input, pageOrder) => {
+      capturedOrder = pageOrder;
+      return new Uint8Array([9]);
+    });
+    const { container } = renderPage(client, async () => makeRenderer(3));
+    addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
+    await screen.findAllByRole("img");
+
+    // El selector deriva su valor del modelo (todas conservadas). Deseleccionar
+    // la página 2 escribe removed=true por originalIndex vía applySelection.
+    fireEvent.click(screen.getByRole("button", { name: "Página 2" }));
+    // El botón de la rejilla refleja el cambio de una sola fuente de verdad.
+    expect(
+      screen.getByRole("button", { name: "Conservar la página 2" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+    await waitFor(() => {
+      expect(capturedOrder).toBeDefined();
+    });
+    expect(capturedOrder && Array.from(capturedOrder)).toEqual([0, 2]);
+  });
+
+  it("pasa las miniaturas async renderizadas al selector (R24)", async () => {
+    const { container } = renderPage(noopClient, async () => makeRenderer(3));
+    addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
+    await screen.findAllByRole("img");
+
+    await waitFor(() => {
+      const cell = container.querySelector(
+        '[data-testid="select-page-0"]',
+      ) as HTMLElement | null;
+      expect(cell?.style.backgroundImage).toContain("data:thumb-0");
+    });
   });
 
   it("al limpiar el archivo libera el renderer y aborta el render (R47)", async () => {

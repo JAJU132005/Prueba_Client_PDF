@@ -83,3 +83,22 @@ export function resolvePageOrder(model: OrganizeModel): number[] {
 export function remainingCount(model: OrganizeModel): number {
   return model.filter((item) => !item.removed).length;
 }
+
+/**
+ * Fija `removed` por `originalIndex`: un item queda con `removed === false` si su
+ * `originalIndex` está en `selectedOriginalIndices`, y `removed === true` en caso
+ * contrario. Preserva el orden actual del modelo y devuelve una estructura NUEVA
+ * (nuevo arreglo y nuevos items), sin mutar la entrada. Es el único punto de
+ * escritura selección→modelo del selector visual. (R30)
+ *
+ * Función pura: sin pdf-lib, sin pdf.js, sin DOM, sin React.
+ */
+export function applySelection(
+  model: OrganizeModel,
+  selectedOriginalIndices: ReadonlySet<number>,
+): OrganizeModel {
+  return model.map((item) => ({
+    ...item,
+    removed: !selectedOriginalIndices.has(item.originalIndex),
+  }));
+}

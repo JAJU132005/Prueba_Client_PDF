@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
+import type { PageCounter } from "@/pdf/pageCount";
 import type { RotateOptions } from "@/pdf/rotateOptions";
 import { InvalidRotationError, type ProgressCallback } from "@/pdf/types";
 import { RotatePdf } from "@/routes/RotatePdf";
@@ -23,14 +24,9 @@ function addFiles(container: HTMLElement, files: File[]): void {
   fireEvent.change(fileInput(container), { target: { files } });
 }
 
-function selectSubset(): void {
-  fireEvent.click(screen.getByLabelText("Solo algunas"));
-}
-
-function setRange(value: string): void {
-  fireEvent.change(screen.getByLabelText("Rangos de páginas a rotar"), {
-    target: { value },
-  });
+/** Contador de páginas falso (sin pdf.js): devuelve un número fijo. */
+function fakeCounter(pages: number): PageCounter {
+  return async () => pages;
 }
 
 /** Cliente falso que captura la llamada a rotate y devuelve bytes fijos. */
@@ -71,44 +67,61 @@ function fakeClient(rotate: PdfClient["rotate"]): PdfClient {
         },
       };
     },
+    async protect() {
+      return new Uint8Array();
+    },
+    async annotate() {
+      return new Uint8Array();
+    },
+    async sign() {
+      return new Uint8Array();
+    },
+    async detectForm() {
+      return { hasFields: false, fields: [] };
+    },
+    async fillForms() {
+      return new Uint8Array();
+    },
+    async ocr() {
+      return { text: "" };
+    },
     dispose() {
       // no-op
     },
   };
 }
 
-function renderPage(client: PdfClient) {
+function renderPage(client: PdfClient, counter: PageCounter = fakeCounter(3)) {
   return render(
     <MemoryRouter>
-      <RotatePdf client={client} />
+      <RotatePdf client={client} countPages={counter} />
     </MemoryRouter>,
   );
 }
 
 describe("RotatePdf", () => {
-  it("mantiene 'Rotar' deshabilitado sin PDF y lo habilita con un PDF en modo todas (R37)", () => {
+  it("mantiene 'Rotar' deshabilitado sin PDF y lo habilita al contar páginas (R37)", async () => {
     const client = fakeClient(async () => new Uint8Array([1]));
     const { container } = renderPage(client);
 
     expect(screen.getByRole("button", { name: "Rotar" })).toBeDisabled();
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
+    await screen.findByRole("button", { name: "Página 1" });
     expect(screen.getByRole("button", { name: "Rotar" })).toBeEnabled();
   });
 
-  it("en modo subconjunto con rango vacío permanece deshabilitado y se habilita al escribir (R37)", () => {
+  it("con todas las páginas deseleccionadas 'Rotar' se deshabilita (R37)", async () => {
     const client = fakeClient(async () => new Uint8Array([1]));
-    const { container } = renderPage(client);
+    const { container } = renderPage(client, fakeCounter(1));
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
-    selectSubset();
+    await screen.findByRole("button", { name: "Página 1" });
+    fireEvent.click(screen.getByRole("button", { name: "Página 1" }));
     expect(screen.getByRole("button", { name: "Rotar" })).toBeDisabled();
-
-    setRange("1-2");
-    expect(screen.getByRole("button", { name: "Rotar" })).toBeEnabled();
   });
 
-  it("al pulsar invoca rotate con los bytes y un RotateOptions correcto (R38)", async () => {
+  it("al pulsar invoca rotate con los bytes y pages derivado del selector (R38)", async () => {
     let capturedBytes: Uint8Array | undefined;
     let capturedOptions: RotateOptions | undefined;
     const client = fakeClient(async (input, options) => {
@@ -116,11 +129,12 @@ describe("RotatePdf", () => {
       capturedOptions = options;
       return new Uint8Array([9]);
     });
-    const { container } = renderPage(client);
+    const { container } = renderPage(client, fakeCounter(3));
 
     addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
-    selectSubset();
-    setRange("1-2");
+    await screen.findByRole("button", { name: "Página 1" });
+    // Deselecciona la página 3 → pages esperado "1-2".
+    fireEvent.click(screen.getByRole("button", { name: "Página 3" }));
     fireEvent.change(screen.getByLabelText("Ángulo de rotación"), {
       target: { value: "180" },
     });
@@ -133,15 +147,16 @@ describe("RotatePdf", () => {
     expect(capturedOptions).toEqual({ angle: 180, pages: "1-2" });
   });
 
-  it("en modo todas envía pages 'all' (R38)", async () => {
+  it("con todas las páginas seleccionadas envía pages 'all' (R38)", async () => {
     let capturedOptions: RotateOptions | undefined;
     const client = fakeClient(async (_input, options) => {
       capturedOptions = options;
       return new Uint8Array([9]);
     });
-    const { container } = renderPage(client);
+    const { container } = renderPage(client, fakeCounter(2));
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
+    await screen.findByRole("button", { name: "Página 1" });
     fireEvent.click(screen.getByRole("button", { name: "Rotar" }));
 
     await waitFor(() => {
@@ -161,6 +176,7 @@ describe("RotatePdf", () => {
     const { container } = renderPage(client);
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
+    await screen.findByRole("button", { name: "Página 1" });
     fireEvent.click(screen.getByRole("button", { name: "Rotar" }));
 
     const bar = await screen.findByRole("progressbar");
@@ -176,6 +192,7 @@ describe("RotatePdf", () => {
     const { container } = renderPage(client);
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
+    await screen.findByRole("button", { name: "Página 1" });
     fireEvent.click(screen.getByRole("button", { name: "Rotar" }));
 
     expect(
@@ -190,6 +207,7 @@ describe("RotatePdf", () => {
     const { container } = renderPage(client);
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
+    await screen.findByRole("button", { name: "Página 1" });
     fireEvent.click(screen.getByRole("button", { name: "Rotar" }));
 
     const alert = await screen.findByRole("alert");

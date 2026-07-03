@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 
+import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { PRIVACY_BADGE_TEXT } from "@/lib/offlineEducation";
 
 export function Header(): JSX.Element {
   return (
@@ -10,10 +12,11 @@ export function Header(): JSX.Element {
           clientpdf
         </Link>
         <div className="flex items-center gap-3">
+          <OfflineIndicator />
           <ThemeToggle />
           <span className="inline-flex items-center gap-1 rounded-xl border border-border bg-bg px-3 py-1 text-sm font-medium text-text-muted">
             <span aria-hidden="true">🔒</span>
-            100% local
+            {PRIVACY_BADGE_TEXT}
           </span>
         </div>
       </div>

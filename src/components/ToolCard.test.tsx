@@ -3,8 +3,9 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import { ToolCard } from "@/components/ToolCard";
+import { RESOURCE_COST_LABEL, type ResourceCost } from "@/lib/resourceCost";
 
-function renderCard(): HTMLElement {
+function renderCard(resourceCost: ResourceCost = "light"): HTMLElement {
   const { container } = render(
     <MemoryRouter>
       <ToolCard
@@ -13,6 +14,7 @@ function renderCard(): HTMLElement {
         to="/unir"
         icon="merge"
         category="organizar"
+        resourceCost={resourceCost}
       />
     </MemoryRouter>,
   );
@@ -47,5 +49,17 @@ describe("ToolCard", () => {
   it("el enlace apunta a la ruta recibida en 'to' (R3)", () => {
     renderCard();
     expect(screen.getByRole("link")).toHaveAttribute("href", "/unir");
+  });
+
+  it("muestra el badge de consumo con la etiqueta del nivel recibido (R3)", () => {
+    renderCard("heavy");
+    expect(
+      screen.getByText(RESOURCE_COST_LABEL.heavy),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(
+        `Consumo de recursos: ${RESOURCE_COST_LABEL.heavy}`,
+      ),
+    ).toBeInTheDocument();
   });
 });

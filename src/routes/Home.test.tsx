@@ -38,42 +38,51 @@ describe("Home", () => {
     );
   });
 
-  it("al activar una tarjeta navega a su ruta y renderiza el placeholder (R11)", () => {
-    renderApp();
-
-    // Las rutas /unir, /dividir, /rotar, /organizar, /pdf-a-imagenes,
-    // /imagenes-a-pdf, /numeros-pagina, /marca-agua y /comprimir ya tienen
-    // página real; se elige una herramienta que siga siendo placeholder para
-    // validar la navegación genérica.
-    const placeholderTool = TOOLS.find(
-      (tool) =>
-        tool.path !== "/unir" &&
-        tool.path !== "/dividir" &&
-        tool.path !== "/rotar" &&
-        tool.path !== "/organizar" &&
-        tool.path !== "/pdf-a-imagenes" &&
-        tool.path !== "/imagenes-a-pdf" &&
-        tool.path !== "/numeros-pagina" &&
-        tool.path !== "/marca-agua" &&
-        tool.path !== "/comprimir",
-    );
-    if (!placeholderTool) {
-      throw new Error("no hay herramienta placeholder disponible");
+  it("al activar una tarjeta navega a su ruta y renderiza su página real (R11)", () => {
+    // Todas las herramientas ya tienen página real (la última en migrar fue
+    // /proteger en #14); por eso esta navegación lleva a una ruta real, cuyo
+    // cliente crea un Worker al montar. Se stubea `Worker` para poder montar la
+    // página en jsdom sin instanciar el worker real.
+    const originalWorker = globalThis.Worker;
+    class StubWorker {
+      postMessage(): void {
+        // no-op: ningún método del cliente se invoca en este test de navegación.
+      }
+      addEventListener(): void {
+        // no-op
+      }
+      removeEventListener(): void {
+        // no-op
+      }
+      terminate(): void {
+        // no-op
+      }
     }
-    const grid = screen.getByRole("region", {
-      name: /herramientas disponibles/i,
-    });
-    const card = within(grid).getByRole("link", {
-      name: new RegExp(placeholderTool.title, "i"),
-    });
+    (globalThis as { Worker: unknown }).Worker = StubWorker;
 
-    fireEvent.click(card);
+    try {
+      renderApp();
 
-    expect(
-      screen.getByRole("heading", {
-        name: new RegExp(placeholderTool.title, "i"),
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/disponible pronto/i)).toBeInTheDocument();
+      const protectTool = TOOLS.find((tool) => tool.path === "/proteger");
+      if (!protectTool) {
+        throw new Error("no se encontró la herramienta protect");
+      }
+      const grid = screen.getByRole("region", {
+        name: /herramientas disponibles/i,
+      });
+      const card = within(grid).getByRole("link", {
+        name: new RegExp(protectTool.title, "i"),
+      });
+
+      fireEvent.click(card);
+
+      // Navegó a la página real (su heading aparece) y no al placeholder.
+      expect(
+        screen.getByRole("heading", { name: "Proteger / desbloquear PDF" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/disponible pronto/i)).not.toBeInTheDocument();
+    } finally {
+      (globalThis as { Worker: unknown }).Worker = originalWorker;
+    }
   });
 });

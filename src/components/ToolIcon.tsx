@@ -79,6 +79,34 @@ const ICON_PATHS: Record<ToolIconId, JSX.Element> = {
       <path d="M9 12l2 2 4-4" />
     </>
   ),
+  annotate: (
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </>
+  ),
+  sign: (
+    <>
+      <path d="M3 17c3 0 4-8 6-8s2 6 4 6 2-4 4-4" />
+      <path d="M4 21h16" />
+    </>
+  ),
+  "fill-forms": (
+    <>
+      <path d="M6 3h9l3 3v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+      <path d="M8 9h6" />
+      <path d="M8 13h6" />
+      <path d="m14.5 16.5 1.5 1.5 3-3" />
+    </>
+  ),
+  ocr: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M7 9h2a1.5 1.5 0 0 1 0 3H7Zm0 3v3" />
+      <path d="M14 9v6" />
+      <path d="M14 9h2a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-2l3 3" />
+    </>
+  ),
 };
 
 export function ToolIcon(props: {

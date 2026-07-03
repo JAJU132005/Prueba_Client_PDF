@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 
 import { App } from "@/App";
 import { ThemeProvider } from "@/design/theme";
+import { initPwa } from "@/pwa/swRegistration";
 import "@/design/tokens.css";
 
 const rootElement = document.getElementById("root");
@@ -20,3 +21,5 @@ createRoot(rootElement).render(
     </ThemeProvider>
   </StrictMode>,
 );
+
+initPwa();

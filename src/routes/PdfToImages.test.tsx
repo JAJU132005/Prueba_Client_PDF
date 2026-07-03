@@ -151,6 +151,26 @@ describe("PdfToImages", () => {
     expect(rasterizer.options[0].scale).toBe(3);
   });
 
+  it("solo exporta las páginas seleccionadas en el selector (R27)", async () => {
+    const rasterizer = makeRasterizer(3);
+    const { container } = renderPage(async () => rasterizer);
+    addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
+    await screen.findByRole("button", { name: "Convertir" });
+
+    // Deselecciona la página 2 → solo se exportan las páginas 1 y 3.
+    fireEvent.click(screen.getByRole("button", { name: "Página 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Convertir" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("button", { name: /Descargar la página/ }),
+      ).toHaveLength(2);
+    });
+    expect(container.querySelector('[data-testid="page-0"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="page-1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="page-2"]')).not.toBeNull();
+  });
+
   it("muestra una barra de progreso mientras convierte (R31)", async () => {
     let resolveRender: ((blob: Blob) => void) | undefined;
     const rasterizer: PageRasterizer = {

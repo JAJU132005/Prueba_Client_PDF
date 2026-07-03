@@ -11,8 +11,8 @@ const VALID_CATEGORIES: ReadonlySet<ToolCategory> = new Set<ToolCategory>([
 ]);
 
 describe("TOOLS", () => {
-  it("lista las 10 herramientas previstas (features #5-#14) (R5)", () => {
-    expect(TOOLS).toHaveLength(10);
+  it("lista las 14 herramientas previstas (features #5-#26) (R5)", () => {
+    expect(TOOLS).toHaveLength(14);
   });
 
   it("expone los ids esperados del catálogo (R5)", () => {
@@ -28,6 +28,10 @@ describe("TOOLS", () => {
       "watermark",
       "compress",
       "protect",
+      "annotate",
+      "sign",
+      "fill-forms",
+      "ocr",
     ]);
   });
 

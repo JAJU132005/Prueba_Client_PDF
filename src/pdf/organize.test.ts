@@ -2,6 +2,9 @@ import { PDFDocument } from "pdf-lib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { organizePdf } from "@/pdf/organize";
+// El fuente del módulo se lee como texto vía `?raw` de Vite (sin `node:fs`),
+// por lo que el test corre en jsdom. (R5)
+import organizeSource from "@/pdf/organize.ts?raw";
 import {
   InvalidPageOrderError,
   InvalidPdfError,
@@ -57,6 +60,38 @@ describe("organizePdf (camino feliz)", () => {
       expect(p).toBeLessThanOrEqual(1);
     }
     expect(progress[progress.length - 1]).toBe(1);
+  });
+
+  it("reorder + delete produce el orden inferido esperado (R5)", async () => {
+    // 4 páginas; reordena y elimina: pageOrder final [3, 1, 0] (omite la 2).
+    const pdf4 = await makePdf(4);
+    const out = await organizePdf(pdf4, [3, 1, 0]);
+    expect(await inferredOrder(out)).toEqual([3, 1, 0]);
+  });
+
+  it("no muta la entrada: dos invocaciones con los mismos bytes y pageOrder son equivalentes (R6)", async () => {
+    const pdf4 = await makePdf(4);
+    const pageOrder = [3, 1, 0];
+    const first = await organizePdf(pdf4, pageOrder);
+    // Segunda invocación con LOS MISMOS bytes de entrada (no recreados).
+    const second = await organizePdf(pdf4, pageOrder);
+    const orderFirst = await inferredOrder(first);
+    const orderSecond = await inferredOrder(second);
+    // Mismo número de páginas y mismo orden inferido → la entrada no se mutó.
+    expect(orderFirst).toEqual([3, 1, 0]);
+    expect(orderSecond).toEqual(orderFirst);
+    // Los bytes de entrada siguen siendo un PDF de 4 páginas cargable.
+    const reloaded = await PDFDocument.load(pdf4);
+    expect(reloaded.getPageCount()).toBe(4);
+  });
+});
+
+describe("organizePdf (invariante estructural anti-Hipótesis 2)", () => {
+  it("construye un documento nuevo con copyPages y NO usa removePage (R5)", () => {
+    expect(organizeSource).toContain("PDFDocument.create()");
+    expect(organizeSource).toContain("copyPages");
+    // Guarda contra la mutación del documento de origen (causa descartada H2).
+    expect(organizeSource).not.toContain("removePage");
   });
 });
 

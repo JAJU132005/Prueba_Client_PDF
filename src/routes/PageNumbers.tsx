@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 
 import { Dropzone } from "@/components/Dropzone";
+import { ResourceCostNote } from "@/components/ResourceCostNote";
+import { LivePreview } from "@/components/LivePreview";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -8,11 +10,20 @@ import {
 } from "@/lib/fileValidation";
 import {
   DEFAULT_PAGE_NUMBER_FONT_SIZE,
+  formatPageNumber,
   PAGE_NUMBER_FORMATS,
   PAGE_NUMBER_POSITIONS,
   type PageNumberFormat,
   type PageNumberPosition,
+  type PageNumbersOptions,
 } from "@/pdf/pageNumbers";
+import {
+  buildPageNumbersOverlay,
+  type ContentSize,
+  type PreviewOverlay,
+  type PreviewPageSize,
+} from "@/pdf/previewModel";
+import type { PageRasterizerFactory } from "@/pdf/rasterize";
 import {
   createPdfClient,
   isPdfWorkerError,
@@ -63,9 +74,26 @@ function messageForError(error: unknown): string {
 export interface PageNumbersProps {
   /** Cliente inyectable (tests). Por defecto se crea uno con worker real. (R48) */
   client?: PdfClient;
+  /**
+   * Factoría de rasterizador para la vista previa (tests). Por defecto la del
+   * panel `LivePreview` (`createPdfjsPageRasterizer`). No es una estructura de
+   * opciones de la herramienta; solo plumbing de render (R25b).
+   */
+  createRasterizer?: PageRasterizerFactory;
 }
 
-export function PageNumbers({ client }: PageNumbersProps = {}): JSX.Element {
+/**
+ * Ancho aproximado del texto en puntos PDF para posicionar el overlay de la
+ * vista previa. Aproximación tipográfica (sin DOM); el modelo puro solo coloca.
+ */
+function approxTextWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * 0.6;
+}
+
+export function PageNumbers({
+  client,
+  createRasterizer,
+}: PageNumbersProps = {}): JSX.Element {
   // Se crea el cliente (y su worker) una sola vez; si se inyecta, se reutiliza.
   const pdfClient = useMemo(() => client ?? createPdfClient(), [client]);
 
@@ -79,8 +107,40 @@ export function PageNumbers({ client }: PageNumbersProps = {}): JSX.Element {
   const [progress, setProgress] = useState(0);
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Tamaño real de la página (puntos PDF) y recuento de páginas que reporta el
+  // panel al cargar el documento; alimentan `previewModel`.
+  const [previewPageSize, setPreviewPageSize] =
+    useState<PreviewPageSize | null>(null);
+  const [totalPages, setTotalPages] = useState(1);
 
   const canNumber = files.length > 0 && status !== "processing";
+
+  // Overlay de aproximación de la página 0, derivado de las opciones de dominio
+  // EXISTENTES (`PageNumbersOptions`) mediante `previewModel`; sin estructuras
+  // nuevas. La vista previa muestra siempre la página de índice 0. (R25a, R25b, R29)
+  const overlays: PreviewOverlay[] = useMemo(() => {
+    if (!previewPageSize) {
+      return [];
+    }
+    const options: PageNumbersOptions = {
+      position,
+      format,
+      startNumber,
+      fontSize,
+    };
+    const text = formatPageNumber(
+      options.format,
+      options.startNumber,
+      options.startNumber + totalPages - 1,
+    );
+    const content: ContentSize = {
+      width: approxTextWidth(text, fontSize),
+      height: fontSize,
+    };
+    return [
+      buildPageNumbersOverlay(options, previewPageSize, content, 0, totalPages),
+    ];
+  }, [previewPageSize, totalPages, position, format, startNumber, fontSize]);
 
   async function handleAddNumbers(): Promise<void> {
     if (files.length === 0) {
@@ -108,6 +168,16 @@ export function PageNumbers({ client }: PageNumbersProps = {}): JSX.Element {
     }
   }
 
+  function handleFilesChange(next: File[]): void {
+    setFiles(next);
+    setStatus("idle");
+    setProgress(0);
+    setResultBlob(null);
+    setErrorMessage(null);
+    setPreviewPageSize(null);
+    setTotalPages(1);
+  }
+
   function handleDownload(): void {
     if (resultBlob) {
       downloadBlob(resultBlob, "numerado.pdf");
@@ -124,6 +194,8 @@ export function PageNumbers({ client }: PageNumbersProps = {}): JSX.Element {
     setProgress(0);
     setResultBlob(null);
     setErrorMessage(null);
+    setPreviewPageSize(null);
+    setTotalPages(1);
   }
 
   return (
@@ -142,12 +214,13 @@ export function PageNumbers({ client }: PageNumbersProps = {}): JSX.Element {
           formato, el número de inicio y el tamaño de fuente. Tu archivo se
           procesa en tu navegador y nunca se sube a ningún servidor.
         </p>
+        <ResourceCostNote toolId="page-numbers" />
       </header>
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
           files={files}
-          onFilesChange={setFiles}
+          onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
           label="Arrastra tu PDF o haz clic para seleccionar"
@@ -232,6 +305,17 @@ export function PageNumbers({ client }: PageNumbersProps = {}): JSX.Element {
             className="w-full max-w-[8rem] rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
         </div>
+
+        {files.length > 0 && (
+          <LivePreview
+            file={files[0]}
+            pageIndex={0}
+            overlays={overlays}
+            onPageSize={setPreviewPageSize}
+            onPageCount={setTotalPages}
+            createRasterizer={createRasterizer}
+          />
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <button

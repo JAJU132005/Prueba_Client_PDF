@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { PageRangeSelector } from "@/components/PageRangeSelector";
 import { Dropzone } from "@/components/Dropzone";
+import { ResourceCostNote } from "@/components/ResourceCostNote";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -8,6 +10,7 @@ import {
 } from "@/lib/fileValidation";
 import { createPdfjsThumbnailRenderer } from "@/lib/pdfjsThumbnailRenderer";
 import {
+  applySelection,
   createOrganizeModel,
   movePage,
   remainingCount,
@@ -15,6 +18,7 @@ import {
   toggleRemoved,
   type OrganizeModel,
 } from "@/pdf/organizeModel";
+import type { PageSelectionState } from "@/pdf/pageSelection";
 import {
   renderThumbnails,
   type ThumbnailRenderer,
@@ -110,8 +114,11 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
     try {
       const buffer = await file.arrayBuffer();
       const input = new Uint8Array(buffer);
-      // Crea el renderer (pdf.js parsea en su propio worker). (R45)
-      const renderer = await createRenderer(input);
+      // pdf.js transfiere y detacha el ArrayBuffer de los bytes que recibe en
+      // `getDocument({ data })`. Le entregamos una COPIA desechable y guardamos
+      // `input` pristino para la exportación, de modo que su buffer no quede
+      // detached al cruzar Comlink hacia el worker. (R1, R3)
+      const renderer = await createRenderer(input.slice());
       if (controller.signal.aborted) {
         renderer.destroy();
         return;
@@ -214,6 +221,20 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
     setModel((prev) => toggleRemoved(prev, position));
   }
 
+  // El OrganizeModel es la única fuente de verdad: la selección del selector es
+  // una PROYECCIÓN derivada (páginas conservadas por `originalIndex`). (R28)
+  const selectorValue: PageSelectionState = {
+    pageCount: model.length,
+    selected: new Set(
+      model.filter((item) => !item.removed).map((item) => item.originalIndex),
+    ),
+  };
+
+  function handleSelectionChange(next: PageSelectionState): void {
+    // Se escribe de vuelta al modelo preservando el orden actual. (R28, R30)
+    setModel((prev) => applySelection(prev, next.selected));
+  }
+
   return (
     <section className="py-8">
       <header className="flex flex-col gap-3">
@@ -230,6 +251,7 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
           Tu archivo se procesa en tu navegador y nunca se sube a ningún
           servidor.
         </p>
+        <ResourceCostNote toolId="organize" />
       </header>
 
       <div className="mt-8 flex flex-col gap-6">
@@ -310,6 +332,20 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
               );
             })}
           </ul>
+        )}
+
+        {model.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-text">
+              Seleccionar páginas a conservar
+            </span>
+            <PageRangeSelector
+              pageCount={model.length}
+              value={selectorValue}
+              onChange={handleSelectionChange}
+              thumbnails={thumbnails}
+            />
+          </div>
         )}
 
         {model.length > 0 && (

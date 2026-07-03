@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { Dropzone } from "@/components/Dropzone";
+import { ResourceCostNote } from "@/components/ResourceCostNote";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -105,6 +106,7 @@ export function MergePdf({ client }: MergePdfProps = {}): JSX.Element {
           archivos se procesan en tu navegador y nunca se suben a ningún
           servidor.
         </p>
+        <ResourceCostNote toolId="merge" />
       </header>
 
       <div className="mt-8 flex flex-col gap-6">

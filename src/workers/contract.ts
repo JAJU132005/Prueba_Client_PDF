@@ -1,25 +1,55 @@
+import type { Annotation } from "@/pdf/annotate";
 import type {
   CompressOptions,
   CompressPdfResult,
   CompressionReport,
 } from "@/pdf/compressPdf";
+import type {
+  FieldFill,
+  FillFormsOptions,
+  FormFieldInfo,
+  FormFieldType,
+  FormModel,
+} from "@/pdf/fillForms";
 import type { ImagesToPdfOptions } from "@/pdf/imagesToPdf";
+import type {
+  OcrImageInput,
+  OcrLanguage,
+  OcrOptions,
+  OcrOutput,
+  OcrResult,
+} from "@/pdf/ocrPdf";
 import type { PageNumbersOptions } from "@/pdf/pageNumbers";
 import type { ProbeInput, ProbeResult } from "@/pdf/probe";
+import type { ProtectOptions } from "@/pdf/protectPdf";
 import type { RotateOptions } from "@/pdf/rotateOptions";
+import type { SignOptions } from "@/pdf/signature";
 import type { ProgressCallback } from "@/pdf/types";
 import type { WatermarkOptions } from "@/pdf/watermark";
 
 export type {
+  Annotation,
   CompressOptions,
   CompressPdfResult,
   CompressionReport,
+  FieldFill,
+  FillFormsOptions,
+  FormFieldInfo,
+  FormFieldType,
+  FormModel,
   ImagesToPdfOptions,
+  OcrImageInput,
+  OcrLanguage,
+  OcrOptions,
+  OcrOutput,
+  OcrResult,
   PageNumbersOptions,
   ProbeInput,
   ProbeResult,
   ProgressCallback,
+  ProtectOptions,
   RotateOptions,
+  SignOptions,
   WatermarkOptions,
 };
 
@@ -111,4 +141,68 @@ export interface PdfWorkerApi {
     options: CompressOptions,
     onProgress?: ProgressCallback,
   ): Promise<CompressPdfResult>;
+  /**
+   * Protege (cifra) o desbloquea (descifra) `input` según `options` (modo +
+   * contraseña) y devuelve los bytes resultantes. El cifrado real corre en el
+   * worker; la lógica vive en `protectPdf` (dominio puro), que delega en el motor
+   * `@cantoo/pdf-lib`. Aquí solo se declara el contrato. (R15)
+   */
+  protect(
+    input: Uint8Array,
+    options: ProtectOptions,
+    onProgress?: ProgressCallback,
+  ): Promise<Uint8Array>;
+  /**
+   * Aplana (incrusta) la capa de `annotations` sobre las páginas de `input` y
+   * devuelve los bytes. `annotations` es un primitivo serializable por Comlink
+   * (objetos planos + `Uint8Array`). El aplanado pesado corre en el worker; la
+   * lógica vive en `flattenAnnotations` (dominio puro). Aquí solo se declara el
+   * contrato. (R22, R23)
+   */
+  annotate(
+    input: Uint8Array,
+    annotations: readonly Annotation[],
+    onProgress?: ProgressCallback,
+  ): Promise<Uint8Array>;
+  /**
+   * Coloca (incrusta y aplana) la imagen de firma de `options` en la página y
+   * posición elegidas de `input` y devuelve los bytes. Firma VISUAL, no
+   * criptográfica. El trabajo pesado de pdf-lib corre en el worker; la lógica
+   * vive en `signPdf` (dominio puro). Aquí solo se declara el contrato. (R10)
+   */
+  sign(
+    input: Uint8Array,
+    options: SignOptions,
+    onProgress?: ProgressCallback,
+  ): Promise<Uint8Array>;
+  /**
+   * Detecta los campos AcroForm de `input` (texto/checkbox/radio/dropdown) y
+   * devuelve un modelo serializable con `hasFields` y la lista de campos. La
+   * lógica vive en `detectFormFields` (dominio puro); aquí solo se declara el
+   * contrato. (R17, R18)
+   */
+  detectForm(input: Uint8Array): Promise<FormModel>;
+  /**
+   * Rellena los campos de `input` según `options.fills` y, si `options.flatten`,
+   * aplana el formulario incrustando los valores en el contenido de página;
+   * devuelve los bytes resultantes. La lógica vive en `fillForms` (dominio
+   * puro); aquí solo se declara el contrato. (R17, R18, R19)
+   */
+  fillForms(
+    input: Uint8Array,
+    options: FillFormsOptions,
+    onProgress?: ProgressCallback,
+  ): Promise<Uint8Array>;
+  /**
+   * Reconoce el texto (OCR) de las páginas rasterizadas `pages` con Tesseract.js
+   * y ensambla la salida: siempre el texto y, si `options.output` lo pide, un
+   * PDF con capa de texto invisible buscable. El OCR (WASM) y el ensamblado
+   * (pdf-lib) corren en el worker; la lógica vive en `ocrImages` (dominio puro)
+   * con el motor `OcrEngine` inyectado. Aquí solo se declara el contrato. (R21)
+   */
+  ocr(
+    pages: readonly OcrImageInput[],
+    options: OcrOptions,
+    onProgress?: ProgressCallback,
+  ): Promise<OcrResult>;
 }

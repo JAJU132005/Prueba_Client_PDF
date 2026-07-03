@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { PdfPreviewModal } from "@/components/PdfPreviewModal";
 import { formatBytes } from "@/lib/formatBytes";
 import { moveItem, removeItem } from "@/lib/fileList";
 import {
@@ -7,6 +8,61 @@ import {
   type FileValidationConfig,
   type RejectedFile,
 } from "@/lib/fileValidation";
+import { createPdfjsPageRasterizer } from "@/lib/pdfjsPageRasterizer";
+import { pdfjsPageCount } from "@/lib/pdfjsPageCounter";
+import {
+  countPdfPages,
+  formatPageCount,
+  type PageCounter,
+  type PageCountResult,
+} from "@/pdf/pageCount";
+import type { PageRasterizerFactory } from "@/pdf/rasterize";
+
+/** Estado de conteo por archivo: en curso o resultado final. */
+type PageCountState = PageCountResult | { status: "counting" };
+
+/** ¿El archivo es un PDF (por extensión o MIME)? Solo estos se cuentan. (R17) */
+function isPdfFile(file: File): boolean {
+  return (
+    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+  );
+}
+
+/**
+ * Renderiza el estado de conteo de un archivo junto a su tamaño:
+ * - sin estado (archivo no-PDF) → nada (R17),
+ * - `"counting"` → "contando…" (R4a),
+ * - `"counted"` → "N páginas"/"1 página" (R2, R3),
+ * - `"unavailable"` → "páginas: —" con aviso accesible (R11, R12a).
+ */
+function renderPageCount(state: PageCountState | undefined): JSX.Element | null {
+  if (!state) {
+    return null;
+  }
+  if (state.status === "counting") {
+    return <span className="text-xs text-text-muted">contando…</span>;
+  }
+  if (state.status === "counted") {
+    return (
+      <span className="text-xs text-text-muted">
+        {formatPageCount(state.pages)}
+      </span>
+    );
+  }
+  if (state.status === "unavailable") {
+    return (
+      <span
+        className="text-xs text-text-muted"
+        title="No se pudo determinar el número de páginas."
+        aria-label="No se pudo determinar el número de páginas."
+      >
+        páginas: —
+      </span>
+    );
+  }
+  // "cancelled" no debería mostrarse (se descarta antes de aplicarse). (R14b)
+  return null;
+}
 
 export interface DropzoneProps {
   /** Lista controlada por el consumidor (la herramienta). */
@@ -19,6 +75,18 @@ export interface DropzoneProps {
   multiple?: boolean;
   /** Texto/etiqueta de la zona, para accesibilidad y UI. */
   label?: string;
+  /**
+   * Contador de páginas inyectable (tests). Por defecto `pdfjsPageCount`
+   * (pdf.js). Sigue el patrón de inyección `createRasterizer?` de
+   * `PdfToImages`. (R1)
+   */
+  countPages?: PageCounter;
+  /**
+   * Factoría de rasterizador inyectable (tests) para el visor de vista previa.
+   * Por defecto `createPdfjsPageRasterizer` (pdf.js). Mismo patrón que
+   * `countPages`. (R18)
+   */
+  createRasterizer?: PageRasterizerFactory;
 }
 
 export function Dropzone({
@@ -27,10 +95,105 @@ export function Dropzone({
   validation,
   multiple = true,
   label = "Arrastra archivos o haz clic para seleccionar",
+  countPages = pdfjsPageCount,
+  createRasterizer = createPdfjsPageRasterizer,
 }: DropzoneProps): JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [rejected, setRejected] = useState<RejectedFile[]>([]);
+  // Archivo cuyo visor de vista previa está abierto (o null). (R18)
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+
+  // Estado de conteo por archivo, con clave = referencia del objeto `File`
+  // (estable entre renders porque la lista la controla el padre).
+  const [pageCounts, setPageCounts] = useState<Map<File, PageCountState>>(
+    () => new Map(),
+  );
+  // Un `AbortController` por archivo, para abortar conteos individualmente.
+  const controllersRef = useRef<Map<File, AbortController>>(new Map());
+  // El último `countPages` recibido, sin reiniciar el efecto al cambiar la prop.
+  const countPagesRef = useRef(countPages);
+  countPagesRef.current = countPages;
+
+  // Actualiza el resultado de un archivo solo si sigue trazado. (R14b, R15)
+  function applyResult(file: File, result: PageCountResult): void {
+    setPageCounts((prev) => {
+      if (!prev.has(file)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(file, result);
+      return next;
+    });
+  }
+
+  // Arranca/cancela conteos al cambiar la lista de archivos. (R1, R13, R17)
+  useEffect(() => {
+    const present = new Set(files);
+    const controllers = controllersRef.current;
+
+    // Archivos quitados/reemplazados: abortar su conteo y olvidar su estado. (R13)
+    for (const [file, controller] of controllers) {
+      if (!present.has(file)) {
+        controller.abort();
+        controllers.delete(file);
+      }
+    }
+    setPageCounts((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const file of prev.keys()) {
+        if (!present.has(file)) {
+          next.delete(file);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    // Archivos PDF nuevos: iniciar conteo asíncrono y cancelable. (R1, R17)
+    for (const file of files) {
+      if (!isPdfFile(file) || controllers.has(file)) {
+        continue;
+      }
+      const controller = new AbortController();
+      controllers.set(file, controller);
+      setPageCounts((prev) => new Map(prev).set(file, { status: "counting" }));
+
+      void (async (): Promise<void> => {
+        let input: Uint8Array;
+        try {
+          input = new Uint8Array(await file.arrayBuffer());
+        } catch {
+          if (!controller.signal.aborted) {
+            applyResult(file, { status: "unavailable" });
+          }
+          return;
+        }
+        const result = await countPdfPages(
+          input,
+          countPagesRef.current,
+          controller.signal,
+        );
+        // No actualizar la lista con un resultado cancelado. (R14b)
+        if (result.status === "cancelled" || controller.signal.aborted) {
+          return;
+        }
+        applyResult(file, result);
+      })();
+    }
+  }, [files]);
+
+  // Al desmontar: abortar todos los conteos en curso. (R15)
+  useEffect(() => {
+    const controllers = controllersRef.current;
+    return () => {
+      for (const controller of controllers.values()) {
+        controller.abort();
+      }
+      controllers.clear();
+    };
+  }, []);
 
   function addFiles(incoming: readonly File[]): void {
     const { accepted, rejected: nextRejected } = validateFiles(
@@ -132,6 +295,17 @@ export function Dropzone({
               <span className="text-xs text-text-muted">
                 {formatBytes(file.size)}
               </span>
+              {renderPageCount(pageCounts.get(file))}
+              {isPdfFile(file) && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewFile(file)}
+                  aria-label={`Vista previa de ${file.name}`}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+                >
+                  Vista previa
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onFilesChange(moveItem(files, index, index - 1))}
@@ -174,6 +348,14 @@ export function Dropzone({
             </p>
           ))}
         </div>
+      )}
+
+      {previewFile && (
+        <PdfPreviewModal
+          file={previewFile}
+          onClose={() => setPreviewFile(null)}
+          createRasterizer={createRasterizer}
+        />
       )}
     </div>
   );

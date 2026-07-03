@@ -1,11 +1,18 @@
+import { cantooPdfCryptoEngine } from "@/lib/cantooPdfCryptoEngine";
 import { offscreenImageRecompressor } from "@/lib/offscreenImageRecompressor";
+import { tesseractOcrEngine } from "@/lib/tesseractOcrEngine";
+import { flattenAnnotations } from "@/pdf/annotate";
 import { compressPdf, type ImageRecompressor } from "@/pdf/compressPdf";
+import { detectFormFields, fillForms } from "@/pdf/fillForms";
 import { imagesToPdf } from "@/pdf/imagesToPdf";
 import { mergePdfs } from "@/pdf/merge";
+import { ocrImages, type OcrEngine } from "@/pdf/ocrPdf";
 import { organizePdf } from "@/pdf/organize";
 import { addPageNumbers } from "@/pdf/pageNumbers";
 import { probe } from "@/pdf/probe";
+import { protectPdf, type PdfCryptoEngine } from "@/pdf/protectPdf";
 import { rotatePdf } from "@/pdf/rotate";
+import { signPdf } from "@/pdf/signature";
 import { splitPdf } from "@/pdf/split";
 import { addWatermark } from "@/pdf/watermark";
 import type { PdfWorkerApi } from "@/workers/contract";
@@ -17,6 +24,8 @@ import type { PdfWorkerApi } from "@/workers/contract";
  */
 export function createPdfWorkerApi(
   recompress: ImageRecompressor = offscreenImageRecompressor,
+  cryptoEngine: PdfCryptoEngine = cantooPdfCryptoEngine,
+  ocrEngine: OcrEngine = tesseractOcrEngine,
 ): PdfWorkerApi {
   return {
     async probe(input, onProgress) {
@@ -45,6 +54,24 @@ export function createPdfWorkerApi(
     },
     async compress(input, options, onProgress) {
       return compressPdf(input, options, recompress, onProgress);
+    },
+    async protect(input, options, onProgress) {
+      return protectPdf(input, options, cryptoEngine, onProgress);
+    },
+    async annotate(input, annotations, onProgress) {
+      return flattenAnnotations(input, annotations, onProgress);
+    },
+    async sign(input, options, onProgress) {
+      return signPdf(input, options, onProgress);
+    },
+    async detectForm(input) {
+      return detectFormFields(input);
+    },
+    async fillForms(input, options, onProgress) {
+      return fillForms(input, options, onProgress);
+    },
+    async ocr(pages, options, onProgress) {
+      return ocrImages(pages, ocrEngine, options, onProgress);
     },
   };
 }

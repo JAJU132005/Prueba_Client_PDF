@@ -66,6 +66,24 @@ function fakeClient(imagesToPdf: PdfClient["imagesToPdf"]): PdfClient {
         },
       };
     },
+    async protect() {
+      return new Uint8Array();
+    },
+    async annotate() {
+      return new Uint8Array();
+    },
+    async sign() {
+      return new Uint8Array();
+    },
+    async detectForm() {
+      return { hasFields: false, fields: [] };
+    },
+    async fillForms() {
+      return new Uint8Array();
+    },
+    async ocr() {
+      return { text: "" };
+    },
     dispose() {
       // no-op
     },

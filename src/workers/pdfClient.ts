@@ -1,12 +1,17 @@
 import * as Comlink from "comlink";
 
+import type { Annotation } from "@/pdf/annotate";
 import type {
   CompressOptions,
   CompressPdfResult,
 } from "@/pdf/compressPdf";
+import type { FillFormsOptions, FormModel } from "@/pdf/fillForms";
 import type { ImagesToPdfOptions } from "@/pdf/imagesToPdf";
+import type { OcrImageInput, OcrOptions, OcrResult } from "@/pdf/ocrPdf";
 import type { PageNumbersOptions } from "@/pdf/pageNumbers";
+import type { ProtectOptions } from "@/pdf/protectPdf";
 import type { RotateOptions } from "@/pdf/rotateOptions";
+import type { SignOptions } from "@/pdf/signature";
 import type { ProgressCallback } from "@/pdf/types";
 import type { WatermarkOptions } from "@/pdf/watermark";
 import type {
@@ -93,6 +98,60 @@ export interface PdfClient {
     options: CompressOptions,
     onProgress?: ProgressCallback,
   ): Promise<CompressPdfResult>;
+  /**
+   * Protege (cifra) o desbloquea (descifra) `input` según `options` y devuelve
+   * los bytes resultantes. La lógica corre en el worker; aquí solo se transporta
+   * la llamada. (R18)
+   */
+  protect(
+    input: Uint8Array,
+    options: ProtectOptions,
+    onProgress?: ProgressCallback,
+  ): Promise<Uint8Array>;
+  /**
+   * Aplana la capa de `annotations` sobre `input` y devuelve los bytes. La
+   * lógica corre en el worker; aquí solo se transporta la llamada. (R22, R23)
+   */
+  annotate(
+    input: Uint8Array,
+    annotations: readonly Annotation[],
+    onProgress?: ProgressCallback,
+  ): Promise<Uint8Array>;
+  /**
+   * Coloca la imagen de firma de `options` en `input` (firma visual) y devuelve
+   * los bytes. La lógica corre en el worker; aquí solo se transporta la llamada.
+   * (R11)
+   */
+  sign(
+    input: Uint8Array,
+    options: SignOptions,
+    onProgress?: ProgressCallback,
+  ): Promise<Uint8Array>;
+  /**
+   * Detecta los campos AcroForm de `input` y devuelve el modelo del formulario.
+   * La lógica corre en el worker; aquí solo se transporta la llamada. (R17, R18)
+   */
+  detectForm(input: Uint8Array): Promise<FormModel>;
+  /**
+   * Rellena (y opcionalmente aplana) el formulario de `input` según `options` y
+   * devuelve los bytes. La lógica corre en el worker; aquí solo se transporta la
+   * llamada. (R18, R19)
+   */
+  fillForms(
+    input: Uint8Array,
+    options: FillFormsOptions,
+    onProgress?: ProgressCallback,
+  ): Promise<Uint8Array>;
+  /**
+   * Reconoce el texto (OCR) de las páginas rasterizadas `pages` y devuelve el
+   * `OcrResult` (texto y, opcionalmente, PDF buscable). La lógica corre en el
+   * worker; aquí solo se transporta la llamada. (R23, R24)
+   */
+  ocr(
+    pages: readonly OcrImageInput[],
+    options: OcrOptions,
+    onProgress?: ProgressCallback,
+  ): Promise<OcrResult>;
   /** Libera el worker subyacente (no-op si la API fue inyectada). */
   dispose(): void;
 }
@@ -118,6 +177,12 @@ const PDF_WORKER_ERROR_NAMES = new Set<string>([
   "PageNumbersFailedError",
   "WatermarkFailedError",
   "CompressFailedError",
+  "IncorrectPasswordError",
+  "ProtectFailedError",
+  "AnnotateFailedError",
+  "SignFailedError",
+  "FillFormFailedError",
+  "OcrFailedError",
 ]);
 
 /**
@@ -205,6 +270,53 @@ export function createPdfClient(injectedApi?: PdfWorkerApi): PdfClient {
         try {
           // Rama inyectada (tests): el callback se pasa directo, sin Comlink.
           return await injectedApi.compress(input, options, onProgress);
+        } catch (error) {
+          throw error;
+        }
+      },
+      async protect(input, options, onProgress) {
+        try {
+          // Rama inyectada (tests): el callback se pasa directo, sin Comlink.
+          return await injectedApi.protect(input, options, onProgress);
+        } catch (error) {
+          throw error;
+        }
+      },
+      async annotate(input, annotations, onProgress) {
+        try {
+          // Rama inyectada (tests): el callback se pasa directo, sin Comlink.
+          return await injectedApi.annotate(input, annotations, onProgress);
+        } catch (error) {
+          throw error;
+        }
+      },
+      async sign(input, options, onProgress) {
+        try {
+          // Rama inyectada (tests): el callback se pasa directo, sin Comlink.
+          return await injectedApi.sign(input, options, onProgress);
+        } catch (error) {
+          throw error;
+        }
+      },
+      async detectForm(input) {
+        try {
+          return await injectedApi.detectForm(input);
+        } catch (error) {
+          throw error;
+        }
+      },
+      async fillForms(input, options, onProgress) {
+        try {
+          // Rama inyectada (tests): el callback se pasa directo, sin Comlink.
+          return await injectedApi.fillForms(input, options, onProgress);
+        } catch (error) {
+          throw error;
+        }
+      },
+      async ocr(pages, options, onProgress) {
+        try {
+          // Rama inyectada (tests): el callback se pasa directo, sin Comlink.
+          return await injectedApi.ocr(pages, options, onProgress);
         } catch (error) {
           throw error;
         }
@@ -328,6 +440,82 @@ export function createPdfClient(injectedApi?: PdfWorkerApi): PdfClient {
         // de progreso cruza el límite vía Comlink.proxy. (R23, R24)
         return await remote.compress(
           input,
+          options,
+          onProgress ? Comlink.proxy(onProgress) : undefined,
+        );
+      } catch (error) {
+        throw error;
+      }
+    },
+    async protect(input, options, onProgress) {
+      try {
+        // El cifrado/descifrado (@cantoo/pdf-lib) corre en el worker; el callback
+        // de progreso cruza el límite vía Comlink.proxy. La contraseña viaja en
+        // `options` solo hasta el worker del mismo navegador; nunca a la red.
+        // (R19, R33)
+        return await remote.protect(
+          input,
+          options,
+          onProgress ? Comlink.proxy(onProgress) : undefined,
+        );
+      } catch (error) {
+        throw error;
+      }
+    },
+    async annotate(input, annotations, onProgress) {
+      try {
+        // El aplanado pesado (pdf-lib) corre en el worker; el callback de
+        // progreso cruza el límite vía Comlink.proxy. (R22, R23)
+        return await remote.annotate(
+          input,
+          annotations,
+          onProgress ? Comlink.proxy(onProgress) : undefined,
+        );
+      } catch (error) {
+        throw error;
+      }
+    },
+    async sign(input, options, onProgress) {
+      try {
+        // El aplanado pesado (pdf-lib) corre en el worker; el callback de
+        // progreso cruza el límite vía Comlink.proxy. (R11)
+        return await remote.sign(
+          input,
+          options,
+          onProgress ? Comlink.proxy(onProgress) : undefined,
+        );
+      } catch (error) {
+        throw error;
+      }
+    },
+    async detectForm(input) {
+      try {
+        // La detección (pdf-lib) corre en el worker. (R17, R18)
+        return await remote.detectForm(input);
+      } catch (error) {
+        throw error;
+      }
+    },
+    async fillForms(input, options, onProgress) {
+      try {
+        // El rellenado/aplanado (pdf-lib) corre en el worker; el callback de
+        // progreso cruza el límite vía Comlink.proxy. (R18, R19)
+        return await remote.fillForms(
+          input,
+          options,
+          onProgress ? Comlink.proxy(onProgress) : undefined,
+        );
+      } catch (error) {
+        throw error;
+      }
+    },
+    async ocr(pages, options, onProgress) {
+      try {
+        // El OCR (Tesseract.js WASM) y el ensamblado (pdf-lib) corren en el
+        // worker; el callback de progreso REAL cruza el límite vía
+        // Comlink.proxy. (R23, R24)
+        return await remote.ocr(
+          pages,
           options,
           onProgress ? Comlink.proxy(onProgress) : undefined,
         );

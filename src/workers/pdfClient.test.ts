@@ -1,26 +1,35 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AnnotateFailedError,
   CompressFailedError,
+  FillFormFailedError,
   ImagesToPdfFailedError,
+  IncorrectPasswordError,
   InvalidImageError,
   InvalidPageOrderError,
   InvalidPdfError,
   InvalidRangeError,
   InvalidRotationError,
   MergeFailedError,
+  OcrFailedError,
   OrganizeFailedError,
   PageNumbersFailedError,
+  ProtectFailedError,
   RotateFailedError,
+  SignFailedError,
   SplitFailedError,
   WatermarkFailedError,
   type ProgressCallback,
 } from "@/pdf/types";
 import type {
   CompressPdfResult,
+  FormModel,
+  OcrResult,
   PdfWorkerApi,
   ProbeInput,
   ProbeResult,
+  SignOptions,
 } from "@/workers/contract";
 import { createPdfClient, isPdfWorkerError } from "@/workers/pdfClient";
 import { createPdfWorkerApi } from "@/workers/pdfWorkerApi";
@@ -92,6 +101,24 @@ describe("createPdfClient", () => {
       async compress(): Promise<CompressPdfResult> {
         return emptyCompressResult();
       },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
+      },
     };
     const client = createPdfClient(failingApi);
 
@@ -136,6 +163,24 @@ describe("createPdfClient — merge", () => {
       },
       async compress(): Promise<CompressPdfResult> {
         return emptyCompressResult();
+      },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
       },
     };
     return createPdfClient(api);
@@ -203,6 +248,24 @@ describe("createPdfClient — split", () => {
       },
       async compress(): Promise<CompressPdfResult> {
         return emptyCompressResult();
+      },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
       },
     };
     return createPdfClient(api);
@@ -282,6 +345,24 @@ describe("createPdfClient — rotate", () => {
       },
       async compress(): Promise<CompressPdfResult> {
         return emptyCompressResult();
+      },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
       },
     };
     return createPdfClient(api);
@@ -365,6 +446,24 @@ describe("createPdfClient — organize", () => {
       async compress(): Promise<CompressPdfResult> {
         return emptyCompressResult();
       },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
+      },
     };
     return createPdfClient(api);
   }
@@ -443,6 +542,24 @@ describe("createPdfClient — imagesToPdf", () => {
       },
       async compress(): Promise<CompressPdfResult> {
         return emptyCompressResult();
+      },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
       },
     };
     return createPdfClient(api);
@@ -532,6 +649,24 @@ describe("createPdfClient — addPageNumbers", () => {
       },
       async compress(): Promise<CompressPdfResult> {
         return emptyCompressResult();
+      },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
       },
     };
     return createPdfClient(api);
@@ -649,6 +784,24 @@ describe("createPdfClient — addWatermark", () => {
       async compress(): Promise<CompressPdfResult> {
         return emptyCompressResult();
       },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
+      },
     };
     return createPdfClient(api);
   }
@@ -715,6 +868,24 @@ describe("createPdfClient — compress", () => {
         return new Uint8Array();
       },
       compress,
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
+      },
     };
     return createPdfClient(api);
   }
@@ -762,5 +933,509 @@ describe("createPdfClient — compress", () => {
 
   it("isPdfWorkerError reconoce CompressFailedError (R25)", () => {
     expect(isPdfWorkerError(new CompressFailedError())).toBe(true);
+  });
+});
+
+describe("createPdfClient — protect", () => {
+  function clientWith(protect: PdfWorkerApi["protect"]) {
+    const api: PdfWorkerApi = {
+      async probe(input: ProbeInput): Promise<ProbeResult> {
+        return { sum: 0, count: input.values.length };
+      },
+      async merge(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async split(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async rotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async organize(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async imagesToPdf(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async addPageNumbers(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async addWatermark(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async compress(): Promise<CompressPdfResult> {
+        return emptyCompressResult();
+      },
+      protect,
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
+      },
+    };
+    return createPdfClient(api);
+  }
+
+  it("con API inyectada devuelve los bytes del worker (R18)", async () => {
+    const expected = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    const client = clientWith(async () => expected);
+    const result = await client.protect(new Uint8Array([0]), {
+      mode: "protect",
+      password: "x",
+    });
+    expect(result).toEqual(expected);
+  });
+
+  it("reenvía el callback de progreso al protect (R19)", async () => {
+    const client = clientWith(async (_input, _options, onProgress) => {
+      onProgress?.(0);
+      onProgress?.(0.5);
+      onProgress?.(1);
+      return new Uint8Array([9]);
+    });
+    const progress: number[] = [];
+    const onProgress: ProgressCallback = (p) => progress.push(p);
+    await client.protect(
+      new Uint8Array([0]),
+      { mode: "protect", password: "x" },
+      onProgress,
+    );
+    expect(progress).toEqual([0, 0.5, 1]);
+  });
+
+  it("preserva el name de IncorrectPasswordError al cruzar el cliente (R20)", async () => {
+    const client = clientWith(async () => {
+      throw new IncorrectPasswordError();
+    });
+    await expect(
+      client.protect(new Uint8Array([0]), { mode: "unlock", password: "mala" }),
+    ).rejects.toMatchObject({ name: "IncorrectPasswordError" });
+  });
+
+  it("isPdfWorkerError reconoce IncorrectPasswordError y ProtectFailedError (R20)", () => {
+    expect(isPdfWorkerError(new IncorrectPasswordError())).toBe(true);
+    expect(isPdfWorkerError(new ProtectFailedError())).toBe(true);
+  });
+});
+
+describe("createPdfClient — annotate", () => {
+  function clientWith(annotate: PdfWorkerApi["annotate"]) {
+    const api: PdfWorkerApi = {
+      async probe(input: ProbeInput): Promise<ProbeResult> {
+        return { sum: 0, count: input.values.length };
+      },
+      async merge(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async split(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async rotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async organize(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async imagesToPdf(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async addPageNumbers(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async addWatermark(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async compress(): Promise<CompressPdfResult> {
+        return emptyCompressResult();
+      },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      annotate,
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
+      },
+    };
+    return createPdfClient(api);
+  }
+
+  it("con API inyectada delega en annotate y devuelve los bytes (R22, R23)", async () => {
+    let capturedInput: Uint8Array | undefined;
+    const expected = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    const client = clientWith(async (input) => {
+      capturedInput = input;
+      return expected;
+    });
+    const result = await client.annotate(new Uint8Array([1, 2]), [
+      {
+        id: "a",
+        pageIndex: 0,
+        kind: "text",
+        at: { x: 1, y: 2 },
+        text: "hola",
+        fontSize: 12,
+        color: { r: 0, g: 0, b: 0 },
+      },
+    ]);
+    expect(capturedInput && Array.from(capturedInput)).toEqual([1, 2]);
+    expect(result).toEqual(expected);
+  });
+
+  it("reenvía el callback de progreso al annotate (R22)", async () => {
+    const client = clientWith(async (_input, _annotations, onProgress) => {
+      onProgress?.(0);
+      onProgress?.(0.5);
+      onProgress?.(1);
+      return new Uint8Array([9]);
+    });
+    const progress: number[] = [];
+    const onProgress: ProgressCallback = (p) => progress.push(p);
+    await client.annotate(new Uint8Array([0]), [], onProgress);
+    expect(progress).toEqual([0, 0.5, 1]);
+  });
+
+  it("preserva el name de AnnotateFailedError al cruzar el cliente (R30)", async () => {
+    const client = clientWith(async () => {
+      throw new AnnotateFailedError();
+    });
+    await expect(
+      client.annotate(new Uint8Array([0]), []),
+    ).rejects.toMatchObject({ name: "AnnotateFailedError" });
+  });
+
+  it("isPdfWorkerError reconoce AnnotateFailedError", () => {
+    expect(isPdfWorkerError(new AnnotateFailedError())).toBe(true);
+  });
+});
+
+describe("createPdfClient — sign", () => {
+  const baseOptions: SignOptions = {
+    pageIndex: 0,
+    position: "center",
+    widthPts: 50,
+    image: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+  };
+
+  function clientWith(sign: PdfWorkerApi["sign"]) {
+    const api: PdfWorkerApi = {
+      async probe(input: ProbeInput): Promise<ProbeResult> {
+        return { sum: 0, count: input.values.length };
+      },
+      async merge(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async split(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async rotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async organize(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async imagesToPdf(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async addPageNumbers(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async addWatermark(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async compress(): Promise<CompressPdfResult> {
+        return emptyCompressResult();
+      },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      sign,
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
+      },
+    };
+    return createPdfClient(api);
+  }
+
+  it("con API inyectada delega en sign con los bytes y las opciones (R11)", async () => {
+    let capturedInput: Uint8Array | undefined;
+    let capturedOptions: SignOptions | undefined;
+    const expected = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    const client = clientWith(async (input, options) => {
+      capturedInput = input;
+      capturedOptions = options;
+      return expected;
+    });
+    const result = await client.sign(new Uint8Array([1, 2]), baseOptions);
+    expect(capturedInput && Array.from(capturedInput)).toEqual([1, 2]);
+    expect(capturedOptions).toEqual(baseOptions);
+    expect(result).toEqual(expected);
+  });
+
+  it("reenvía el callback de progreso al sign (R11)", async () => {
+    const client = clientWith(async (_input, _options, onProgress) => {
+      onProgress?.(0);
+      onProgress?.(0.5);
+      onProgress?.(1);
+      return new Uint8Array([9]);
+    });
+    const progress: number[] = [];
+    const onProgress: ProgressCallback = (p) => progress.push(p);
+    await client.sign(new Uint8Array([0]), baseOptions, onProgress);
+    expect(progress).toEqual([0, 0.5, 1]);
+  });
+
+  it("preserva el name de SignFailedError al cruzar el cliente (R12)", async () => {
+    const client = clientWith(async () => {
+      throw new SignFailedError();
+    });
+    await expect(
+      client.sign(new Uint8Array([0]), baseOptions),
+    ).rejects.toMatchObject({ name: "SignFailedError" });
+  });
+
+  it("isPdfWorkerError reconoce SignFailedError (R12)", () => {
+    expect(isPdfWorkerError(new SignFailedError())).toBe(true);
+  });
+});
+
+describe("createPdfClient — detectForm / fillForms", () => {
+  function clientWith(
+    detectForm: PdfWorkerApi["detectForm"],
+    fillForms: PdfWorkerApi["fillForms"],
+  ) {
+    const api: PdfWorkerApi = {
+      async probe(input: ProbeInput): Promise<ProbeResult> {
+        return { sum: 0, count: input.values.length };
+      },
+      async merge(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async split(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async rotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async organize(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async imagesToPdf(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async addPageNumbers(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async addWatermark(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async compress(): Promise<CompressPdfResult> {
+        return emptyCompressResult();
+      },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      detectForm,
+      fillForms,
+      async ocr(): Promise<OcrResult> {
+        return { text: "" };
+      },
+    };
+    return createPdfClient(api);
+  }
+
+  it("fillForms vía cliente inyectado rellena y opcional aplana (R17,R18)", async () => {
+    const model: FormModel = {
+      hasFields: true,
+      fields: [{ name: "nombre", type: "text", value: "" }],
+    };
+    let capturedInput: Uint8Array | undefined;
+    let capturedFlatten: boolean | undefined;
+    const expected = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    const client = clientWith(
+      async () => model,
+      async (input, options) => {
+        capturedInput = input;
+        capturedFlatten = options.flatten;
+        return expected;
+      },
+    );
+
+    const detected = await client.detectForm(new Uint8Array([1, 2]));
+    expect(detected).toEqual(model);
+
+    const out = await client.fillForms(new Uint8Array([3, 4]), {
+      fills: [{ name: "nombre", kind: "text", value: "Ada" }],
+      flatten: true,
+    });
+    expect(capturedInput && Array.from(capturedInput)).toEqual([3, 4]);
+    expect(capturedFlatten).toBe(true);
+    expect(out).toEqual(expected);
+  });
+
+  it("reenvía el callback de progreso al fillForms (R19)", async () => {
+    const client = clientWith(
+      async () => ({ hasFields: false, fields: [] }),
+      async (_input, _options, onProgress) => {
+        onProgress?.(0);
+        onProgress?.(0.5);
+        onProgress?.(1);
+        return new Uint8Array([9]);
+      },
+    );
+    const progress: number[] = [];
+    const onProgress: ProgressCallback = (p) => progress.push(p);
+    await client.fillForms(
+      new Uint8Array([0]),
+      { fills: [], flatten: false },
+      onProgress,
+    );
+    expect(progress).toEqual([0, 0.5, 1]);
+  });
+
+  it("preserva el name de FillFormFailedError al cruzar el cliente (R21)", async () => {
+    const client = clientWith(
+      async () => ({ hasFields: false, fields: [] }),
+      async () => {
+        throw new FillFormFailedError();
+      },
+    );
+    await expect(
+      client.fillForms(new Uint8Array([0]), {
+        fills: [{ name: "x", kind: "text", value: "y" }],
+        flatten: false,
+      }),
+    ).rejects.toMatchObject({ name: "FillFormFailedError" });
+  });
+
+  it("isPdfWorkerError reconoce FillFormFailedError (R21)", () => {
+    expect(isPdfWorkerError(new FillFormFailedError())).toBe(true);
+  });
+});
+
+describe("createPdfClient — ocr", () => {
+  function clientWith(ocr: PdfWorkerApi["ocr"]) {
+    const api: PdfWorkerApi = {
+      async probe(input: ProbeInput): Promise<ProbeResult> {
+        return { sum: 0, count: input.values.length };
+      },
+      async merge(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async split(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async rotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async organize(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async imagesToPdf(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async addPageNumbers(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async addWatermark(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async compress(): Promise<CompressPdfResult> {
+        return emptyCompressResult();
+      },
+      async protect(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async annotate(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async sign(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      async detectForm(): Promise<FormModel> {
+        return { hasFields: false, fields: [] };
+      },
+      async fillForms(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
+      ocr,
+    };
+    return createPdfClient(api);
+  }
+
+  it("con API inyectada devuelve el OcrResult del worker (R23)", async () => {
+    const expected: OcrResult = {
+      text: "hola mundo",
+      pdfBytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+    };
+    const client = clientWith(async () => expected);
+    const result = await client.ocr(
+      [{ bytes: new Uint8Array([1]), mimeType: "image/png" }],
+      { language: "spa", output: "both" },
+    );
+    expect(result).toEqual(expected);
+  });
+
+  it("reenvía el callback de progreso al ocr [0, 0.5, 1] (R24)", async () => {
+    const client = clientWith(async (_pages, _options, onProgress) => {
+      onProgress?.(0);
+      onProgress?.(0.5);
+      onProgress?.(1);
+      return { text: "x" };
+    });
+    const progress: number[] = [];
+    const onProgress: ProgressCallback = (p) => progress.push(p);
+    await client.ocr(
+      [{ bytes: new Uint8Array([1]), mimeType: "image/png" }],
+      { language: "eng", output: "text" },
+      onProgress,
+    );
+    expect(progress).toEqual([0, 0.5, 1]);
+  });
+
+  it("preserva el name de OcrFailedError al cruzar el cliente (R25)", async () => {
+    const client = clientWith(async () => {
+      throw new OcrFailedError();
+    });
+    await expect(
+      client.ocr([], { language: "eng", output: "text" }),
+    ).rejects.toMatchObject({ name: "OcrFailedError" });
+  });
+
+  it("isPdfWorkerError reconoce OcrFailedError (R25)", () => {
+    expect(isPdfWorkerError(new OcrFailedError())).toBe(true);
   });
 });

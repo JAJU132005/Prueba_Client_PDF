@@ -1,3 +1,5 @@
+import type { ResourceCost } from "@/lib/resourceCost";
+
 export type ToolCategory =
   | "organizar"
   | "convertir"
@@ -14,7 +16,11 @@ export type ToolIconId =
   | "page-numbers"
   | "watermark"
   | "compress"
-  | "protect";
+  | "protect"
+  | "annotate"
+  | "sign"
+  | "fill-forms"
+  | "ocr";
 
 export interface Tool {
   id: string;
@@ -23,6 +29,7 @@ export interface Tool {
   path: string;
   category: ToolCategory;
   icon: ToolIconId;
+  resourceCost: ResourceCost;
 }
 
 export const TOOLS: readonly Tool[] = [
@@ -33,6 +40,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/unir",
     category: "organizar",
     icon: "merge",
+    resourceCost: "light",
   },
   {
     id: "split",
@@ -41,6 +49,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/dividir",
     category: "organizar",
     icon: "split",
+    resourceCost: "light",
   },
   {
     id: "rotate",
@@ -49,6 +58,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/rotar",
     category: "organizar",
     icon: "rotate",
+    resourceCost: "light",
   },
   {
     id: "organize",
@@ -57,6 +67,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/organizar",
     category: "organizar",
     icon: "organize",
+    resourceCost: "medium",
   },
   {
     id: "pdf-to-images",
@@ -65,6 +76,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/pdf-a-imagenes",
     category: "convertir",
     icon: "pdf-to-images",
+    resourceCost: "medium",
   },
   {
     id: "images-to-pdf",
@@ -73,6 +85,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/imagenes-a-pdf",
     category: "convertir",
     icon: "images-to-pdf",
+    resourceCost: "light",
   },
   {
     id: "page-numbers",
@@ -81,6 +94,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/numeros-pagina",
     category: "organizar",
     icon: "page-numbers",
+    resourceCost: "light",
   },
   {
     id: "watermark",
@@ -89,6 +103,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/marca-agua",
     category: "organizar",
     icon: "watermark",
+    resourceCost: "light",
   },
   {
     id: "compress",
@@ -97,6 +112,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/comprimir",
     category: "optimizar",
     icon: "compress",
+    resourceCost: "heavy",
   },
   {
     id: "protect",
@@ -105,5 +121,47 @@ export const TOOLS: readonly Tool[] = [
     path: "/proteger",
     category: "seguridad",
     icon: "protect",
+    resourceCost: "medium",
+  },
+  {
+    id: "annotate",
+    title: "Editar y anotar PDF",
+    description: "Añade texto, resaltados, dibujos, formas e imágenes sobre tus páginas.",
+    path: "/anotar",
+    category: "organizar",
+    icon: "annotate",
+    resourceCost: "heavy",
+  },
+  {
+    id: "sign",
+    title: "Firmar PDF",
+    description: "Coloca tu firma (subida o dibujada) como imagen en la página que elijas.",
+    path: "/firmar",
+    category: "seguridad",
+    icon: "sign",
+    resourceCost: "medium",
+  },
+  {
+    id: "fill-forms",
+    title: "Rellenar formularios",
+    description: "Detecta y rellena los campos de un formulario PDF; opcionalmente aplana los valores.",
+    path: "/rellenar-formularios",
+    category: "organizar",
+    icon: "fill-forms",
+    resourceCost: "medium",
+  },
+  {
+    id: "ocr",
+    title: "Reconocer texto (OCR)",
+    description: "Extrae el texto de un PDF escaneado y crea, si quieres, un PDF con texto buscable.",
+    path: "/reconocer-texto",
+    category: "convertir",
+    icon: "ocr",
+    resourceCost: "heavy",
   },
 ] as const;
+
+/** Resuelve el nivel de una herramienta por su `id` estable. undefined si no existe. */
+export function getToolResourceCost(id: string): ResourceCost | undefined {
+  return TOOLS.find((tool) => tool.id === id)?.resourceCost;
+}
