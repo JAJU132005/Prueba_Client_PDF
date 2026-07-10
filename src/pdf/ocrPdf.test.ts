@@ -4,11 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   INVISIBLE_TEXT_OPACITY,
   OCR_LANGUAGES,
+  OCR_MIN_WORD_FONT_SIZE,
   OCR_PAGE_SEPARATOR,
   buildSearchablePdf,
   layoutInvisibleText,
   ocrImages,
   ocrLanguageLabel,
+  wordFontSize,
   type OcrEngine,
   type OcrImageInput,
   type OcrPageRecognition,
@@ -64,6 +66,120 @@ describe("ocrPdf — modelo de idioma (R1, R2)", () => {
     for (const lang of OCR_LANGUAGES) {
       expect(ocrLanguageLabel(lang).trim().length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("ocrPdf — catálogo ampliado #32 (R1, R2, R3)", () => {
+  it("OCR_LANGUAGES tiene > 6 idiomas, incluye spa/eng y ≥ 1 nuevo (#32 R1)", () => {
+    expect(OCR_LANGUAGES.length).toBeGreaterThan(6);
+    expect(OCR_LANGUAGES).toContain("spa");
+    expect(OCR_LANGUAGES).toContain("eng");
+    // Al menos un código fuera del catálogo base de #26.
+    const base = new Set(["spa", "eng", "fra", "deu", "por", "ita"]);
+    expect(OCR_LANGUAGES.some((lang) => !base.has(lang))).toBe(true);
+  });
+
+  it("OCR_LANGUAGES no contiene duplicados (#32 R2)", () => {
+    expect(new Set(OCR_LANGUAGES).size).toBe(OCR_LANGUAGES.length);
+  });
+
+  it("ocrLanguageLabel devuelve etiqueta no vacía por idioma (#32 R3)", () => {
+    for (const lang of OCR_LANGUAGES) {
+      expect(ocrLanguageLabel(lang).trim().length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("ocrPdf — tamaño de fuente por caja #32 (R11, R12, R13, R14, R16)", () => {
+  it("wordFontSize = altura de caja cuando ≥ OCR_MIN_WORD_FONT_SIZE (#32 R11)", () => {
+    const word: OcrWord = { text: "alto", x0: 5, y0: 10, x1: 40, y1: 40 };
+    expect(word.y1 - word.y0).toBeGreaterThanOrEqual(OCR_MIN_WORD_FONT_SIZE);
+    expect(wordFontSize(word)).toBe(word.y1 - word.y0);
+  });
+
+  it("layoutInvisibleText usa size = y1 - y0 con caja alta (#32 R11)", () => {
+    const word: OcrWord = { text: "alto", x0: 5, y0: 10, x1: 40, y1: 40 };
+    const ops = layoutInvisibleText([word], 100);
+    expect(ops[0].size).toBe(word.y1 - word.y0);
+  });
+
+  it("caja más baja que el mínimo → OCR_MIN_WORD_FONT_SIZE (#32 R13)", () => {
+    expect(OCR_MIN_WORD_FONT_SIZE).toBeGreaterThan(0);
+    const word: OcrWord = { text: "bajo", x0: 0, y0: 0, x1: 10, y1: 1 };
+    expect(word.y1 - word.y0).toBeLessThan(OCR_MIN_WORD_FONT_SIZE);
+    expect(wordFontSize(word)).toBe(OCR_MIN_WORD_FONT_SIZE);
+    const ops = layoutInvisibleText([word], 50);
+    expect(ops[0].size).toBe(OCR_MIN_WORD_FONT_SIZE);
+  });
+
+  it("posiciona x = x0, y = pageHeight - y1; 3 palabras → 3 ops (#32 R12, R14)", () => {
+    const words: OcrWord[] = [
+      { text: "uno", x0: 3, y0: 5, x1: 20, y1: 25 },
+      { text: "dos", x0: 30, y0: 5, x1: 50, y1: 25 },
+      { text: "tres", x0: 60, y0: 5, x1: 90, y1: 25 },
+    ];
+    const pageHeight = 200;
+    const ops = layoutInvisibleText(words, pageHeight);
+    expect(ops).toHaveLength(3);
+    expect(ops.map((o) => o.text)).toEqual(["uno", "dos", "tres"]);
+    expect(ops[0].x).toBe(3);
+    expect(ops[0].y).toBe(pageHeight - 25);
+  });
+
+  it("A5 determinista: palabra conocida del motor → op exacta y PDF válido (#32 R15, R16)", async () => {
+    const word: OcrWord = { text: "HOLA", x0: 12, y0: 8, x1: 70, y1: 30 };
+    const pageHeight = 80;
+
+    // (1) El mapeo caja→coords PDF es lógica pura y determinista.
+    const [op] = layoutInvisibleText([word], pageHeight);
+    expect(op.text).toBe("HOLA");
+    expect(op.x).toBe(word.x0);
+    expect(op.y).toBe(pageHeight - word.y1);
+    expect(op.size).toBe(word.y1 - word.y0);
+
+    // (2) Un motor falso que devuelve esa palabra produce el mismo
+    //     posicionamiento a través de ocrImages → buildSearchablePdf.
+    const engine = fakeEngine([{ text: "HOLA", words: [word] }]);
+    const result = await ocrImages([pngInput(PNG_120x80)], engine, {
+      language: "eng",
+      output: "searchable-pdf",
+    });
+    const withWord = result.pdfBytes as Uint8Array;
+    const doc = await PDFDocument.load(withWord);
+    expect(doc.getPageCount()).toBe(1);
+
+    // (3) La página con la palabra pesa más que sin ella.
+    const withoutWord = await buildSearchablePdf([
+      { image: pngInput(PNG_120x80), words: [] },
+    ]);
+    expect(withWord.byteLength).toBeGreaterThan(withoutWord.byteLength);
+  });
+
+  it("progreso #32 con 2 páginas en [0,1], último 1, sin tocar el DOM (#32 R17, R24)", async () => {
+    const createElement = vi.spyOn(document, "createElement");
+    const engine: OcrEngine = {
+      async recognize(_image, _language, onProgress) {
+        onProgress?.(0.5);
+        return { text: "p", words: [] };
+      },
+      async terminate() {
+        // no-op
+      },
+    };
+    const progress: number[] = [];
+    await ocrImages(
+      [pngInput(PNG_120x80), pngInput(PNG_60x40)],
+      engine,
+      { language: "eng", output: "text" },
+      (p) => progress.push(p),
+    );
+    for (const p of progress) {
+      expect(p).toBeGreaterThanOrEqual(0);
+      expect(p).toBeLessThanOrEqual(1);
+    }
+    expect(progress[progress.length - 1]).toBe(1);
+    expect(createElement).not.toHaveBeenCalled();
+    createElement.mockRestore();
   });
 });
 

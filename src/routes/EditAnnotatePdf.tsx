@@ -2,9 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AnnotationEditor } from "@/components/AnnotationEditor";
 import { Dropzone } from "@/components/Dropzone";
+import { ErrorBubble } from "@/components/ErrorBubble";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ResultPanel } from "@/components/ResultPanel";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { LivePreview } from "@/components/LivePreview";
 import { PdfPreviewModal } from "@/components/PdfPreviewModal";
-import { ResourceCostNote } from "@/components/ResourceCostNote";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -13,8 +16,16 @@ import {
 import { pdfjsPageCount } from "@/lib/pdfjsPageCounter";
 import type { Annotation } from "@/pdf/annotate";
 import {
+  DEFAULT_TOOL_SETTINGS,
+  approxTextSize,
+  type ToolSettings,
+} from "@/pdf/annotationInteraction";
+import {
   addAnnotation,
   createAnnotationState,
+  removeAnnotation,
+  selectAnnotation,
+  updateAnnotation,
   type AnnotationTool,
 } from "@/pdf/annotationModel";
 import { countPdfPages, type PageCounter } from "@/pdf/pageCount";
@@ -63,11 +74,6 @@ function messageForError(error: unknown): string {
   return "Ocurrió un error inesperado al anotar el PDF.";
 }
 
-/** Ancho aproximado del texto en puntos PDF para el overlay de vista previa. */
-function approxTextWidth(text: string, fontSize: number): number {
-  return text.length * fontSize * 0.6;
-}
-
 export interface EditAnnotatePdfProps {
   /** Cliente inyectable (tests). Por defecto se crea uno con worker real. */
   client?: PdfClient;
@@ -100,6 +106,7 @@ export function EditAnnotatePdf({
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [editorState, setEditorState] = useState(createAnnotationState());
   const [activeTool, setActiveTool] = useState<AnnotationTool | null>(null);
+  const [settings, setSettings] = useState<ToolSettings>(DEFAULT_TOOL_SETTINGS);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imageData, setImageData] = useState<Uint8Array | null>(null);
   const [status, setStatus] = useState<Status>("idle");
@@ -149,7 +156,7 @@ export function EditAnnotatePdf({
         result.push({
           x: annotation.at.x,
           y: annotation.at.y,
-          width: approxTextWidth(annotation.text, annotation.fontSize),
+          width: approxTextSize(annotation.text, annotation.fontSize).width,
           height: annotation.fontSize,
           opacity: 1,
           rotationDegrees: 0,
@@ -217,6 +224,18 @@ export function EditAnnotatePdf({
     setEditorState((prev) => addAnnotation(prev, annotation));
   }
 
+  function handleUpdateAnnotation(annotation: Annotation): void {
+    setEditorState((prev) => updateAnnotation(prev, annotation));
+  }
+
+  function handleRemoveAnnotation(id: string): void {
+    setEditorState((prev) => removeAnnotation(prev, id));
+  }
+
+  function handleSelectionChange(id: string | null): void {
+    setEditorState((prev) => selectAnnotation(prev, id));
+  }
+
   async function handleExport(): Promise<void> {
     if (files.length === 0 || annotations.length === 0) {
       return;
@@ -270,29 +289,12 @@ export function EditAnnotatePdf({
 
   return (
     <section className="py-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-text md:text-4xl">
-            Editar y anotar PDF
-          </h1>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            100% local
-          </span>
-        </div>
-        <p className="max-w-2xl text-base text-text-muted">
-          Añade cajas de texto, resaltados, dibujos, líneas, rectángulos e
-          imágenes sobre las páginas que elijas. Tu archivo se procesa en tu
-          navegador y nunca se sube a ningún servidor.
-        </p>
-        <ResourceCostNote toolId="annotate" />
-        {/* Aviso de capa, no reescritura (R3) */}
-        <div
-          role="note"
-          className="rounded-xl border border-border bg-primary/5 p-3 text-sm text-text-muted"
-        >
-          {LAYER_NOTICE}
-        </div>
-      </header>
+      <ToolPageHeader toolId="annotate" />
+
+      {/* Aviso de capa, no reescritura (R3; texto ÍNTEGRO, #28 R37) */}
+      <div role="note" className="postit mt-4 max-w-xl text-ink">
+        {LAYER_NOTICE}
+      </div>
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
@@ -300,13 +302,13 @@ export function EditAnnotatePdf({
           onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
-          label="Arrastra tu PDF o haz clic para seleccionar"
+          label="Arrastra tu PDF aquí — ¡prometo no chismosear!"
         />
 
         {files.length > 0 && pageCount > 0 && (
           <>
             <div className="flex flex-col gap-2">
-              <span className="text-sm font-medium text-text">
+              <span className="hand text-lg text-ink">
                 Imagen para la herramienta de imagen (opcional)
               </span>
               <Dropzone
@@ -327,6 +329,12 @@ export function EditAnnotatePdf({
               activeTool={activeTool}
               onToolChange={setActiveTool}
               onAddAnnotation={handleAddAnnotation}
+              onUpdateAnnotation={handleUpdateAnnotation}
+              onRemoveAnnotation={handleRemoveAnnotation}
+              selectedId={editorState.selectedId}
+              onSelectionChange={handleSelectionChange}
+              settings={settings}
+              onSettingsChange={setSettings}
               imageData={imageData}
               createId={createId}
               createRasterizer={createRasterizer}
@@ -346,81 +354,49 @@ export function EditAnnotatePdf({
             type="button"
             onClick={() => void handleExport()}
             disabled={!canExport}
-            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+            className="btn btn-primary lv-pesada"
           >
             Exportar PDF anotado
           </button>
           {files.length === 0 && (
-            <span className="text-sm text-text-muted">
+            <span className="hand soft text-base">
               Selecciona un PDF para anotar.
             </span>
           )}
           {files.length > 0 && annotations.length === 0 && (
-            <span className="text-sm text-text-muted">
+            <span className="hand soft text-base">
               Añade al menos una anotación con las herramientas.
             </span>
           )}
         </div>
 
         {status === "processing" && (
-          <div className="flex flex-col gap-2" aria-live="polite">
-            <div className="flex items-center justify-between text-sm text-text-muted">
-              <span>Procesando localmente…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={progress}
-              className="h-2 w-full overflow-hidden rounded-full bg-border"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                style={{ width: `${String(progress * 100)}%` }}
-              />
-            </div>
+          <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
+            <p className="hand m-0 text-xl text-ink">El panda plancha tus capas de anotación… <span className="scrawl soft">¡PSSSH!</span></p>
+            <ProgressBar value={progress} />
           </div>
         )}
 
         {status === "done" && resultBlob && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
-            <p className="text-sm font-medium text-text">
-              ¡Listo! Tu PDF anotado está preparado.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transition-none"
-              >
-                Descargar
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowPreview(true)}
-                className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-              >
-                Previsualizar
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-              >
-                Anotar otro
-              </button>
-            </div>
-          </div>
+          <ResultPanel
+            fileName="anotado.pdf"
+            onDownload={handleDownload}
+            onReset={handleReset}
+            costLevel="heavy"
+            title="¡Listo! Capas planchadas."
+          >
+            <button
+              type="button"
+              onClick={() => setShowPreview(true)}
+              className="btn mt-3"
+            >
+              Previsualizar
+            </button>
+          </ResultPanel>
         )}
 
         {status === "error" && errorMessage && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {errorMessage}
-          </div>
+          <ErrorBubble message={errorMessage} />
         )}
       </div>
 

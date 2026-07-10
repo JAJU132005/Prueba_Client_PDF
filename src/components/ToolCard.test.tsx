@@ -54,12 +54,10 @@ describe("ToolCard", () => {
   it("muestra el badge de consumo con la etiqueta del nivel recibido (R3)", () => {
     renderCard("heavy");
     expect(
-      screen.getByText(RESOURCE_COST_LABEL.heavy),
-    ).toBeInTheDocument();
+      screen.getByLabelText(/consumo de recursos/i),
+    ).toHaveTextContent(RESOURCE_COST_LABEL.heavy);
     expect(
-      screen.getByLabelText(
-        `Consumo de recursos: ${RESOURCE_COST_LABEL.heavy}`,
-      ),
+      screen.getByLabelText(/consumo de recursos/i),
     ).toBeInTheDocument();
   });
 });

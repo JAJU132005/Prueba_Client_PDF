@@ -11,8 +11,8 @@ const VALID_CATEGORIES: ReadonlySet<ToolCategory> = new Set<ToolCategory>([
 ]);
 
 describe("TOOLS", () => {
-  it("lista las 14 herramientas previstas (features #5-#26) (R5)", () => {
-    expect(TOOLS).toHaveLength(14);
+  it("lista las 16 herramientas previstas (features #5-#27, #30) (R5)", () => {
+    expect(TOOLS).toHaveLength(16);
   });
 
   it("expone los ids esperados del catálogo (R5)", () => {
@@ -32,6 +32,8 @@ describe("TOOLS", () => {
       "sign",
       "fill-forms",
       "ocr",
+      "redact",
+      "sign-free",
     ]);
   });
 
@@ -54,5 +56,31 @@ describe("TOOLS", () => {
     for (const tool of TOOLS) {
       expect(VALID_CATEGORIES.has(tool.category)).toBe(true);
     }
+  });
+
+  // Ampliación ADITIVA #28 (R30/R46): mapeo herramienta → plantilla EXACTO al
+  // de design-incoming/README.md. Las aserciones anteriores no se alteran.
+  it("cada herramienta tiene el template exacto de design-incoming/README.md (#28 R30)", () => {
+    const templates = Object.fromEntries(
+      TOOLS.map((tool) => [tool.id, tool.template]),
+    );
+    expect(templates).toEqual({
+      merge: "01-multi-file",
+      "images-to-pdf": "01-multi-file",
+      rotate: "02-options",
+      compress: "02-options",
+      protect: "02-options",
+      ocr: "02-options",
+      split: "03-page-select",
+      organize: "03-page-select",
+      "pdf-to-images": "03-page-select",
+      "page-numbers": "04-editor-preview",
+      watermark: "04-editor-preview",
+      annotate: "04-editor-preview",
+      sign: "04-editor-preview",
+      "fill-forms": "04-editor-preview",
+      redact: "04-editor-preview",
+      "sign-free": "04-editor-preview",
+    });
   });
 });

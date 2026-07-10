@@ -118,6 +118,9 @@ function fakeClient(annotate: PdfClient["annotate"]): PdfClient {
     async ocr() {
       return { text: "" };
     },
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -147,13 +150,22 @@ function renderAt(
   );
 }
 
-/** Añade un PDF, activa la herramienta de texto y crea una anotación por clic. */
-async function addPdfAndAnnotation(container: HTMLElement): Promise<void> {
+/**
+ * Añade un PDF, activa la herramienta de texto, abre el campo inline, escribe y
+ * confirma la anotación (flujo real de #29: sin literal "Texto").
+ */
+async function addPdfAndAnnotation(
+  container: HTMLElement,
+  text = "Hola",
+): Promise<void> {
   addPdf(container, makePdfFile("a.pdf", [1, 2, 3]));
   const textTool = await screen.findByRole("button", { name: "Texto" });
   fireEvent.click(textTool);
   const overlay = await screen.findByTestId("annotation-overlay");
   fireEvent.click(overlay, { clientX: 20, clientY: 30 });
+  const input = await screen.findByTestId("annotation-text-input");
+  fireEvent.change(input, { target: { value: text } });
+  fireEvent.click(screen.getByRole("button", { name: "Añadir" }));
 }
 
 describe("EditAnnotatePdf — aviso de capa (R3)", () => {
@@ -203,7 +215,7 @@ describe("EditAnnotatePdf — exportación (R22, R26, R27)", () => {
     );
 
     const bar = await screen.findByRole("progressbar");
-    await waitFor(() => expect(bar).toHaveAttribute("aria-valuenow", "0.5"));
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuenow", "50"));
     resolveAnnotate?.(new Uint8Array([9]));
   });
 
@@ -216,7 +228,7 @@ describe("EditAnnotatePdf — exportación (R22, R26, R27)", () => {
       screen.getByRole("button", { name: "Exportar PDF anotado" }),
     );
 
-    const download = await screen.findByRole("button", { name: "Descargar" });
+    const download = await screen.findByRole("button", { name: /descargar resultado/i });
     fireEvent.click(download);
 
     expect(downloadBlob).toHaveBeenCalledTimes(1);
@@ -239,7 +251,73 @@ describe("EditAnnotatePdf — exportación (R22, R26, R27)", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("No se pudo aplanar las anotaciones");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("EditAnnotatePdf — ajustes de estilo y cero red (R1, R2, R29, R31)", () => {
+  it("el tamaño de fuente elegido llega a la anotación exportada (R1, R2)", async () => {
+    let captured: readonly Annotation[] | undefined;
+    const client = fakeClient(async (_input, annotations) => {
+      captured = annotations;
+      return new Uint8Array([9]);
+    });
+    const { container } = renderAt(client);
+
+    addPdf(container, makePdfFile("a.pdf", [1, 2, 3]));
+    fireEvent.click(await screen.findByRole("button", { name: "Texto" }));
+    // Cambia el tamaño de fuente ANTES de crear la anotación.
+    fireEvent.change(screen.getByLabelText("Tamaño de fuente"), {
+      target: { value: "32" },
+    });
+    const overlay = await screen.findByTestId("annotation-overlay");
+    fireEvent.click(overlay, { clientX: 20, clientY: 30 });
+    const input = await screen.findByTestId("annotation-text-input");
+    fireEvent.change(input, { target: { value: "Estilo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir" }));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Exportar PDF anotado" }),
+    );
+
+    await waitFor(() => expect(captured).toBeDefined());
+    expect(captured).toHaveLength(1);
+    const created = captured?.[0];
+    expect(created?.kind).toBe("text");
+    if (created?.kind === "text") {
+      expect(created.fontSize).toBe(32);
+      expect(created.text).toBe("Estilo");
+    }
+  });
+
+  it("exportar pasa al worker exactamente las anotaciones del editor, sin peticiones de red (R29, R31)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      let capturedInput: Uint8Array | undefined;
+      let capturedAnnotations: readonly Annotation[] | undefined;
+      const client = fakeClient(async (input, annotations) => {
+        capturedInput = input;
+        capturedAnnotations = annotations;
+        return new Uint8Array([7]);
+      });
+      const { container } = renderAt(client);
+
+      await addPdfAndAnnotation(container, "Sin red");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Exportar PDF anotado" }),
+      );
+
+      await waitFor(() => expect(capturedAnnotations).toBeDefined());
+      // Se pasan EXACTAMENTE los bytes del PDF y las anotaciones del estado.
+      expect(capturedInput && Array.from(capturedInput)).toEqual([1, 2, 3]);
+      expect(capturedAnnotations).toHaveLength(1);
+      expect(capturedAnnotations?.[0].kind).toBe("text");
+      // Cero red con los datos del usuario.
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

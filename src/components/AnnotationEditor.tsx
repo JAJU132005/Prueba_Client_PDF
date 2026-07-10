@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { PageRangeSelector } from "@/components/PageRangeSelector";
 import { createPdfjsPageRasterizer } from "@/lib/pdfjsPageRasterizer";
+import { usePointerStroke, type StrokePoint } from "@/lib/usePointerStroke";
 import {
   canvasPointToPdf,
   pdfPointToCanvas,
@@ -9,6 +16,21 @@ import {
   type AnnotationColor,
   type PdfPoint,
 } from "@/pdf/annotate";
+import {
+  annotationBounds,
+  beginDraft,
+  commitDraft,
+  createImageAnnotation,
+  createTextAnnotation,
+  hitTest,
+  moveAnnotation,
+  resizeAnnotation,
+  updateAnnotationText,
+  updateDraft,
+  type Draft,
+  type ResizeHandle,
+  type ToolSettings,
+} from "@/pdf/annotationInteraction";
 import { ANNOTATION_TOOLS, type AnnotationTool } from "@/pdf/annotationModel";
 import type { PageSelectionState } from "@/pdf/pageSelection";
 import type { PageRasterizer, PageRasterizerFactory } from "@/pdf/rasterize";
@@ -23,17 +45,14 @@ const TOOL_LABELS: Record<AnnotationTool, string> = {
   image: "Imagen",
 };
 
-/** Tamaños/valores por defecto de cada anotación creada al hacer clic (en puntos PDF). */
-const DEFAULT_FONT_SIZE = 16;
-const DEFAULT_TEXT = "Texto";
-const DEFAULT_HIGHLIGHT = { width: 120, height: 18, opacity: 0.4 };
-const DEFAULT_RECT = { width: 120, height: 80, thickness: 1.5 };
-const DEFAULT_LINE_LENGTH = 100;
-const DEFAULT_LINE_THICKNESS = 1.5;
-const DEFAULT_FREEHAND_STEP = 24;
-const DEFAULT_IMAGE = { width: 120, height: 120 };
-const DEFAULT_COLOR: AnnotationColor = { r: 0, g: 0, b: 0 };
-const HIGHLIGHT_COLOR: AnnotationColor = { r: 1, g: 0.9, b: 0.2 };
+/** Radio (px de vista) del área sensible de un tirador de selección. */
+const HANDLE_HIT_PX = 12;
+/** Lado (px de vista) del cuadrado del tirador dibujado. */
+const HANDLE_SIZE_PX = 10;
+/** Opciones de tamaño de fuente para el control de estilo (pts PDF). */
+const FONT_SIZE_OPTIONS = [10, 12, 14, 16, 20, 24, 32, 48];
+/** Opciones de grosor de trazo para el control de estilo (pts PDF). */
+const THICKNESS_OPTIONS = [1, 1.5, 2, 3, 5, 8];
 
 export interface AnnotationEditorProps {
   /** PDF fuente; sus bytes se leen frescos (sin red) para rasterizar. */
@@ -42,26 +61,35 @@ export interface AnnotationEditorProps {
   pageCount: number;
   /** Anotaciones ya colocadas (controladas por la ruta). */
   annotations: readonly Annotation[];
-  /** Índice 0-indexado de la página activa a anotar (controlado). (R13) */
+  /** Índice 0-indexado de la página activa a anotar (controlado). */
   activePageIndex: number;
-  /** Notifica el cambio de página activa elegido en el selector visual. (R13) */
+  /** Notifica el cambio de página activa elegido en el selector visual. */
   onActivePageChange: (pageIndex: number) => void;
-  /** Herramienta activa; `null` desactiva la creación por clic. */
+  /** Herramienta activa; `null` = modo selección. */
   activeTool: AnnotationTool | null;
   /** Cambia la herramienta activa. */
   onToolChange: (tool: AnnotationTool | null) => void;
-  /** Notifica una nueva anotación creada al hacer clic. (R7–R12) */
+  /** Notifica una nueva anotación creada. (R2, R4, R10, R12, R13, R16) */
   onAddAnnotation: (annotation: Annotation) => void;
+  /** Reemplaza una anotación existente (mover/redimensionar/editar). (R19–R23) */
+  onUpdateAnnotation: (annotation: Annotation) => void;
+  /** Elimina una anotación por id. (R25) */
+  onRemoveAnnotation: (id: string) => void;
+  /** Id de la anotación seleccionada (controlado). (R17) */
+  selectedId: string | null;
+  /** Cambia la selección (o `null` para deseleccionar). (R17, R26) */
+  onSelectionChange: (id: string | null) => void;
+  /** Ajustes de estilo activos para la siguiente anotación. (R1, R2) */
+  settings: ToolSettings;
+  /** Cambia los ajustes de estilo. (R1) */
+  onSettingsChange: (settings: ToolSettings) => void;
   /** Bytes de la imagen cargada para la herramienta de imagen (o null). */
   imageData?: Uint8Array | null;
   /** Escala de render de la página; por defecto 1 (1 punto PDF = 1 px). */
   scale?: number;
   /** Generador de ids inyectable (tests deterministas). */
   createId?: () => string;
-  /**
-   * Factoría de rasterizador inyectable (tests). Por defecto
-   * `createPdfjsPageRasterizer` (async cancelable, sin bloquear la UI). (R24)
-   */
+  /** Factoría de rasterizador inyectable (tests). (R24 de #23) */
   createRasterizer?: PageRasterizerFactory;
 }
 
@@ -74,13 +102,56 @@ function defaultIdFactory(): () => string {
   };
 }
 
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
+function channelToHex(v: number): string {
+  return Math.round(clamp01(v) * 255)
+    .toString(16)
+    .padStart(2, "0");
+}
+
+function rgbToHex(c: AnnotationColor): string {
+  return `#${channelToHex(c.r)}${channelToHex(c.g)}${channelToHex(c.b)}`;
+}
+
+function hexToRgb(hex: string): AnnotationColor {
+  const n = hex.replace("#", "");
+  return {
+    r: parseInt(n.slice(0, 2), 16) / 255,
+    g: parseInt(n.slice(2, 4), 16) / 255,
+    b: parseInt(n.slice(4, 6), 16) / 255,
+  };
+}
+
+function cssColor(c: AnnotationColor): string {
+  return rgbToHex(c);
+}
+
+/** Estado del campo de texto inline: al crear (editingId null) o al reeditar. */
+interface TextDraft {
+  at: PdfPoint;
+  value: string;
+  editingId: string | null;
+}
+
+/** Gesto de selección en curso (mover/redimensionar/deseleccionar). */
+type SelectionGesture =
+  | { type: "move"; original: Annotation; start: PdfPoint }
+  | { type: "resize"; original: Annotation; handle: ResizeHandle }
+  | { type: "deselect" }
+  | { type: "draft" }
+  | null;
+
 /**
- * Lienzo interactivo del editor de anotaciones. Rasteriza el fondo de la página
- * activa con el `PageRasterizer` existente (async cancelable, sin congelar la
- * UI, R24), integra el selector de páginas visual para elegir la página a anotar
- * (R13) y, al hacer clic con una herramienta activa, crea la anotación
- * convirtiendo el punto de clic a puntos PDF con `canvasPointToPdf` (R14). No
- * contiene lógica de PDF (pdf-lib): solo orquesta y delega en el dominio.
+ * Lienzo interactivo del editor de anotaciones (#29). Rasteriza el fondo de la
+ * página activa con el `PageRasterizer` (async cancelable, sin congelar la UI) y
+ * superpone una CAPA SVG fiel que renderiza cada anotación con su geometría y
+ * estilo reales (R27). Los gestos (arrastre para formas/trazo, clic para texto/
+ * imagen, selección/mover/redimensionar) se convierten a puntos PDF con
+ * `canvasPointToPdf`/`pdfPointToCanvas` (R28) y toda la aritmética vive en el
+ * modelo puro `annotationInteraction.ts` (R34). No contiene lógica de pdf-lib.
  */
 export function AnnotationEditor({
   file,
@@ -91,6 +162,12 @@ export function AnnotationEditor({
   activeTool,
   onToolChange,
   onAddAnnotation,
+  onUpdateAnnotation,
+  onRemoveAnnotation,
+  selectedId,
+  onSelectionChange,
+  settings,
+  onSettingsChange,
   imageData,
   scale = 1,
   createId,
@@ -99,24 +176,38 @@ export function AnnotationEditor({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(0);
+  const [viewSize, setViewSize] = useState<{ width: number; height: number } | null>(
+    null,
+  );
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
+  const [imageObjectUrls, setImageObjectUrls] = useState<Record<string, string>>(
+    {},
+  );
 
   const rasterizerRef = useRef<PageRasterizer | null>(null);
   const renderAbortRef = useRef<AbortController | null>(null);
   const imageUrlRef = useRef<string | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const gestureRef = useRef<SelectionGesture>(null);
   const idFactoryRef = useRef<() => string>(createId ?? defaultIdFactory());
   if (createId) {
     idFactoryRef.current = createId;
   }
 
-  // Selección visual: sólo la página activa aparece marcada (single-active).
   const selection: PageSelectionState = useMemo(
     () => ({ pageCount, selected: new Set([activePageIndex]) }),
     [pageCount, activePageIndex],
   );
 
-  // Carga del documento al montar / cambiar `file`. Lee los bytes locales (sin
-  // red) y crea el rasterizador async cancelable. (R24)
+  const pageAnnotations = useMemo(
+    () => annotations.filter((a) => a.pageIndex === activePageIndex),
+    [annotations, activePageIndex],
+  );
+
+  const pageHeightPts = viewSize ? viewSize.height / scale : 0;
+
+  // --- Carga del documento y rasterización del fondo (intacto respecto a #23) ---
   useEffect(() => {
     let cancelled = false;
     setError(null);
@@ -161,7 +252,6 @@ export function AnnotationEditor({
     };
   }, [file, createRasterizer]);
 
-  // Rasteriza SOLO la página activa; al cambiarla, aborta el render previo. (R24)
   useEffect(() => {
     const rasterizer = rasterizerRef.current;
     if (!rasterizer) {
@@ -198,8 +288,40 @@ export function AnnotationEditor({
     };
   }, [activePageIndex, scale, ready]);
 
-  // El selector visual es multi-toggle; aquí lo usamos como single-active: la
-  // página recién marcada (distinta de la activa) pasa a ser la activa. (R13)
+  // Mide el tamaño mostrado de la página para derivar la geometría de la capa
+  // SVG (px de vista = pts · escala). (R28)
+  useLayoutEffect(() => {
+    const el = overlayRef.current;
+    if (imageUrl && el) {
+      const rect = el.getBoundingClientRect();
+      setViewSize({ width: rect.width, height: rect.height });
+    }
+  }, [imageUrl, scale, activePageIndex]);
+
+  // Cierra el campo de texto al cambiar de página o herramienta de creación.
+  useEffect(() => {
+    setTextDraft(null);
+    setDraft(null);
+  }, [activePageIndex]);
+
+  // Object URLs por anotación de imagen para renderizarlas en la capa SVG.
+  useEffect(() => {
+    const urls: Record<string, string> = {};
+    for (const a of pageAnnotations) {
+      if (a.kind === "image") {
+        urls[a.id] = URL.createObjectURL(
+          new Blob([a.data as BlobPart], { type: "image/png" }),
+        );
+      }
+    }
+    setImageObjectUrls(urls);
+    return () => {
+      for (const url of Object.values(urls)) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [pageAnnotations]);
+
   function handleSelectionChange(next: PageSelectionState): void {
     const candidate = [...next.selected].find((i) => i !== activePageIndex);
     if (candidate !== undefined) {
@@ -207,105 +329,220 @@ export function AnnotationEditor({
     }
   }
 
-  function buildAnnotation(at: PdfPoint, tool: AnnotationTool): Annotation | null {
-    const id = idFactoryRef.current();
-    const base = { id, pageIndex: activePageIndex };
-    switch (tool) {
-      case "text":
-        return {
-          ...base,
-          kind: "text",
-          at,
-          text: DEFAULT_TEXT,
-          fontSize: DEFAULT_FONT_SIZE,
-          color: DEFAULT_COLOR,
-        };
-      case "highlight":
-        return {
-          ...base,
-          kind: "highlight",
-          at: { x: at.x, y: at.y - DEFAULT_HIGHLIGHT.height },
-          width: DEFAULT_HIGHLIGHT.width,
-          height: DEFAULT_HIGHLIGHT.height,
-          color: HIGHLIGHT_COLOR,
-          opacity: DEFAULT_HIGHLIGHT.opacity,
-        };
-      case "rect":
-        return {
-          ...base,
-          kind: "rect",
-          at: { x: at.x, y: at.y - DEFAULT_RECT.height },
-          width: DEFAULT_RECT.width,
-          height: DEFAULT_RECT.height,
-          color: DEFAULT_COLOR,
-          thickness: DEFAULT_RECT.thickness,
-        };
-      case "line":
-        return {
-          ...base,
-          kind: "line",
-          start: at,
-          end: { x: at.x + DEFAULT_LINE_LENGTH, y: at.y },
-          color: DEFAULT_COLOR,
-          thickness: DEFAULT_LINE_THICKNESS,
-        };
-      case "freehand":
-        return {
-          ...base,
-          kind: "freehand",
-          points: [
-            at,
-            { x: at.x + DEFAULT_FREEHAND_STEP, y: at.y },
-            { x: at.x + 2 * DEFAULT_FREEHAND_STEP, y: at.y + DEFAULT_FREEHAND_STEP },
-          ],
-          color: DEFAULT_COLOR,
-          thickness: DEFAULT_LINE_THICKNESS,
-        };
-      case "image":
-        if (!imageData) {
-          return null;
+  // --- Conversión de coordenadas (única fuente, R28) ---
+  function toPdf(pxX: number, pxY: number): PdfPoint {
+    return canvasPointToPdf(pxX, pxY, pageHeightPts, scale);
+  }
+
+  function toPx(point: PdfPoint): { left: number; top: number } {
+    return pdfPointToCanvas(point, pageHeightPts, scale);
+  }
+
+  function pointFromClient(clientX: number, clientY: number): PdfPoint {
+    const rect = overlayRef.current?.getBoundingClientRect();
+    const left = rect?.left ?? 0;
+    const top = rect?.top ?? 0;
+    return toPdf(clientX - left, clientY - top);
+  }
+
+  // --- Tiradores de la anotación seleccionada, en puntos PDF ---
+  function handlePositions(
+    a: Annotation,
+  ): { handle: ResizeHandle; point: PdfPoint }[] {
+    if (a.kind === "line") {
+      return [
+        { handle: "start", point: a.start },
+        { handle: "end", point: a.end },
+      ];
+    }
+    const b = annotationBounds(a);
+    return [
+      { handle: "nw", point: { x: b.at.x, y: b.at.y + b.height } },
+      { handle: "ne", point: { x: b.at.x + b.width, y: b.at.y + b.height } },
+      { handle: "sw", point: { x: b.at.x, y: b.at.y } },
+      { handle: "se", point: { x: b.at.x + b.width, y: b.at.y } },
+    ];
+  }
+
+  function handleAt(a: Annotation, pdf: PdfPoint): ResizeHandle | null {
+    const tolerance = HANDLE_HIT_PX / scale;
+    for (const { handle, point } of handlePositions(a)) {
+      if (Math.hypot(point.x - pdf.x, point.y - pdf.y) <= tolerance) {
+        return handle;
+      }
+    }
+    return null;
+  }
+
+  const isDragTool =
+    activeTool === "line" || activeTool === "rect" || activeTool === "highlight";
+
+  // --- Gestos de puntero (creación por arrastre + selección) ---
+  const strokeHandlers = usePointerStroke({
+    onStart: (p: StrokePoint) => {
+      if (textDraft) {
+        return;
+      }
+      const pdf = toPdf(p.x, p.y);
+      if (isDragTool) {
+        setDraft(beginDraft(activeTool as "line" | "rect" | "highlight", pdf));
+        gestureRef.current = { type: "draft" };
+        return;
+      }
+      if (activeTool === "freehand") {
+        setDraft(beginDraft("freehand", pdf));
+        gestureRef.current = { type: "draft" };
+        return;
+      }
+      if (activeTool) {
+        // Texto/imagen se colocan con clic, no con arrastre.
+        gestureRef.current = null;
+        return;
+      }
+      // Modo selección.
+      const selected = pageAnnotations.find((a) => a.id === selectedId);
+      if (selected) {
+        const handle = handleAt(selected, pdf);
+        if (handle) {
+          gestureRef.current = { type: "resize", original: selected, handle };
+          return;
         }
-        return {
-          ...base,
-          kind: "image",
-          at: { x: at.x, y: at.y - DEFAULT_IMAGE.height },
-          width: DEFAULT_IMAGE.width,
-          height: DEFAULT_IMAGE.height,
-          data: imageData,
-        };
+      }
+      const hit = hitTest(pageAnnotations, pdf);
+      if (hit) {
+        if (hit.id !== selectedId) {
+          onSelectionChange(hit.id);
+        }
+        gestureRef.current = { type: "move", original: hit, start: pdf };
+      } else {
+        gestureRef.current = { type: "deselect" };
+      }
+    },
+    onMove: (p: StrokePoint) => {
+      const pdf = toPdf(p.x, p.y);
+      if (draft) {
+        setDraft(updateDraft(draft, pdf));
+        return;
+      }
+      const gesture = gestureRef.current;
+      if (gesture?.type === "move") {
+        onUpdateAnnotation(
+          moveAnnotation(
+            gesture.original,
+            pdf.x - gesture.start.x,
+            pdf.y - gesture.start.y,
+          ),
+        );
+      } else if (gesture?.type === "resize") {
+        onUpdateAnnotation(
+          resizeAnnotation(gesture.original, gesture.handle, pdf),
+        );
+      }
+    },
+    onEnd: () => {
+      if (draft) {
+        const committed = commitDraft(
+          draft,
+          activePageIndex,
+          idFactoryRef.current(),
+          settings,
+        );
+        setDraft(null);
+        gestureRef.current = null;
+        if (committed) {
+          onAddAnnotation(committed);
+        }
+        return;
+      }
+      const gesture = gestureRef.current;
+      gestureRef.current = null;
+      if (gesture?.type === "deselect") {
+        onSelectionChange(null);
+      }
+    },
+  });
+
+  // Texto e imagen: colocación con clic (no arrastre).
+  function handleClick(event: React.MouseEvent<HTMLDivElement>): void {
+    if (textDraft) {
+      return;
+    }
+    const pdf = pointFromClient(event.clientX, event.clientY);
+    if (activeTool === "text") {
+      setTextDraft({ at: pdf, value: "", editingId: null });
+      return;
+    }
+    if (activeTool === "image") {
+      if (!imageData) {
+        return;
+      }
+      onAddAnnotation(
+        createImageAnnotation(
+          idFactoryRef.current(),
+          activePageIndex,
+          pdf,
+          imageData,
+        ),
+      );
     }
   }
 
-  function handleOverlayClick(event: React.MouseEvent<HTMLDivElement>): void {
-    if (!activeTool) {
-      return;
-    }
-    const overlay = overlayRef.current;
-    if (!overlay) {
-      return;
-    }
-    const rect = overlay.getBoundingClientRect();
-    const pxX = event.clientX - rect.left;
-    const pxY = event.clientY - rect.top;
-    // Altura de la página en puntos PDF derivada del tamaño mostrado y la escala.
-    const pageHeightPts = rect.height / scale;
-    const at = canvasPointToPdf(pxX, pxY, pageHeightPts, scale); // (R14)
-    const annotation = buildAnnotation(at, activeTool);
-    if (annotation) {
-      onAddAnnotation(annotation); // (R7–R12)
+  function handleDoubleClick(event: React.MouseEvent<HTMLDivElement>): void {
+    const pdf = pointFromClient(event.clientX, event.clientY);
+    const hit = hitTest(pageAnnotations, pdf);
+    if (hit && hit.kind === "text") {
+      onSelectionChange(hit.id);
+      setTextDraft({ at: hit.at, value: hit.text, editingId: hit.id });
     }
   }
 
-  const pageAnnotations = annotations.filter(
-    (a) => a.pageIndex === activePageIndex,
-  );
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
+    if (
+      (event.key === "Delete" || event.key === "Backspace") &&
+      selectedId &&
+      !textDraft
+    ) {
+      event.preventDefault();
+      onRemoveAnnotation(selectedId);
+    }
+  }
+
+  function confirmText(): void {
+    if (!textDraft) {
+      return;
+    }
+    if (textDraft.editingId) {
+      const existing = pageAnnotations.find((a) => a.id === textDraft.editingId);
+      if (existing && existing.kind === "text") {
+        if (textDraft.value.trim() === "") {
+          onRemoveAnnotation(existing.id); // (R5)
+        } else {
+          onUpdateAnnotation(updateAnnotationText(existing, textDraft.value)); // (R7)
+        }
+      }
+    } else {
+      const created = createTextAnnotation(
+        idFactoryRef.current(),
+        activePageIndex,
+        textDraft.at,
+        textDraft.value,
+        settings,
+      );
+      if (created) {
+        onAddAnnotation(created); // (R4)
+      }
+    }
+    setTextDraft(null);
+  }
+
+  const selectedAnnotation = pageAnnotations.find((a) => a.id === selectedId);
 
   return (
     <section
       aria-label="Editor de anotaciones"
-      className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4 shadow-sm"
+      className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4 shadow-sm"
     >
-      {/* Paleta de herramientas (R7–R12) */}
+      {/* Paleta de herramientas */}
       <div
         role="toolbar"
         aria-label="Herramientas de anotación"
@@ -317,10 +554,10 @@ export function AnnotationEditor({
             type="button"
             onClick={() => onToolChange(activeTool === tool ? null : tool)}
             aria-pressed={activeTool === tool}
-            className={`rounded-xl border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none ${
+            className={`rounded-xl border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mk-green motion-reduce:transition-none ${
               activeTool === tool
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-surface text-text hover:bg-primary/5"
+                ? "border-mk-green bg-hl-green text-mk-green"
+                : "border-line bg-card text-ink hover:bg-hl-green/50"
             }`}
           >
             {TOOL_LABELS[tool]}
@@ -328,9 +565,72 @@ export function AnnotationEditor({
         ))}
       </div>
 
-      {/* Selector de páginas visual: elige la página a anotar (R13) */}
+      {/* Barra de ajustes de estilo (R1, R2) */}
+      <div
+        role="group"
+        aria-label="Ajustes de estilo"
+        className="flex flex-wrap items-center gap-4"
+      >
+        <label className="flex items-center gap-2 text-sm font-medium text-ink">
+          Color
+          <input
+            type="color"
+            aria-label="Color de la anotación"
+            value={rgbToHex(settings.color)}
+            onChange={(e) =>
+              onSettingsChange({ ...settings, color: hexToRgb(e.target.value) })
+            }
+            className="h-8 w-10 cursor-pointer rounded border border-line bg-white"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm font-medium text-ink">
+          Tamaño de fuente
+          <select
+            aria-label="Tamaño de fuente"
+            value={settings.fontSize}
+            onChange={(e) =>
+              onSettingsChange({ ...settings, fontSize: Number(e.target.value) })
+            }
+            className="rounded-lg border border-line bg-white px-2 py-1 text-sm text-ink"
+          >
+            {FONT_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm font-medium text-ink">
+          Grosor
+          <select
+            aria-label="Grosor de trazo"
+            value={settings.thickness}
+            onChange={(e) =>
+              onSettingsChange({ ...settings, thickness: Number(e.target.value) })
+            }
+            className="rounded-lg border border-line bg-white px-2 py-1 text-sm text-ink"
+          >
+            {THICKNESS_OPTIONS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedAnnotation && (
+          <button
+            type="button"
+            onClick={() => onRemoveAnnotation(selectedAnnotation.id)}
+            className="rounded-xl border border-mk-red/40 bg-hl-red/40 px-3 py-1.5 text-sm font-medium text-mk-red transition hover:bg-hl-red/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mk-red motion-reduce:transition-none"
+          >
+            Eliminar
+          </button>
+        )}
+      </div>
+
+      {/* Selector de páginas visual: elige la página a anotar */}
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-text">Página a anotar</span>
+        <span className="text-sm font-medium text-ink">Página a anotar</span>
         <PageRangeSelector
           pageCount={pageCount}
           value={selection}
@@ -341,12 +641,12 @@ export function AnnotationEditor({
       {error ? (
         <div
           role="alert"
-          className="rounded-xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
+          className="rounded-xl border border-mk-red/40 bg-hl-red/40 p-4 text-sm text-mk-red"
         >
           {error}
         </div>
       ) : (
-        <div className="relative flex min-h-[8rem] items-center justify-center overflow-auto rounded-xl bg-bg p-2">
+        <div className="relative flex min-h-[8rem] items-center justify-center overflow-auto rounded-xl bg-paper p-2">
           {imageUrl && (
             <div className="relative">
               <img
@@ -354,57 +654,355 @@ export function AnnotationEditor({
                 alt={`Página ${String(activePageIndex + 1)} para anotar`}
                 className="block max-w-full"
               />
-              {/* Capa interactiva: clic → nueva anotación en puntos PDF (R14) */}
+              {/* Capa interactiva + SVG fiel (R27, R28) */}
               <div
                 ref={overlayRef}
                 data-testid="annotation-overlay"
-                onClick={handleOverlayClick}
-                className="absolute inset-0"
+                tabIndex={0}
+                onPointerDown={strokeHandlers.onPointerDown}
+                onPointerMove={strokeHandlers.onPointerMove}
+                onPointerUp={strokeHandlers.onPointerUp}
+                onPointerLeave={strokeHandlers.onPointerLeave}
+                onClick={handleClick}
+                onDoubleClick={handleDoubleClick}
+                onKeyDown={handleKeyDown}
+                className="absolute inset-0 outline-none"
                 style={{ cursor: activeTool ? "crosshair" : "default" }}
               >
-                {pageAnnotations.map((annotation) => (
-                  <AnnotationMarker
-                    key={annotation.id}
-                    annotation={annotation}
-                    overlay={overlayRef.current}
-                    scale={scale}
+                {viewSize && (
+                  <svg
+                    data-testid="annotation-layer"
+                    width={viewSize.width}
+                    height={viewSize.height}
+                    viewBox={`0 0 ${String(viewSize.width)} ${String(
+                      viewSize.height,
+                    )}`}
+                    className="pointer-events-none absolute inset-0"
+                  >
+                    {pageAnnotations.map((annotation) => (
+                      <AnnotationShape
+                        key={annotation.id}
+                        annotation={annotation}
+                        toPx={toPx}
+                        scale={scale}
+                        imageUrl={imageObjectUrls[annotation.id]}
+                        selected={annotation.id === selectedId}
+                      />
+                    ))}
+                    {draft && (
+                      <DraftShape
+                        draft={draft}
+                        toPx={toPx}
+                        scale={scale}
+                        settings={settings}
+                      />
+                    )}
+                    {selectedAnnotation && (
+                      <SelectionOverlay
+                        annotation={selectedAnnotation}
+                        toPx={toPx}
+                        handles={handlePositions(selectedAnnotation)}
+                      />
+                    )}
+                  </svg>
+                )}
+                {textDraft && viewSize && (
+                  <textarea
+                    data-testid="annotation-text-input"
+                    aria-label="Contenido del texto"
+                    autoFocus
+                    value={textDraft.value}
+                    onChange={(e) =>
+                      setTextDraft({ ...textDraft, value: e.target.value })
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        confirmText();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setTextDraft(null);
+                      }
+                    }}
+                    rows={1}
+                    className="absolute z-10 min-w-[6rem] resize-none rounded border border-mk-green bg-white/95 px-1 py-0.5 text-ink shadow-sm outline-none"
+                    style={{
+                      left: `${String(toPx(textDraft.at).left)}px`,
+                      top: `${String(
+                        toPx(textDraft.at).top - settings.fontSize * scale,
+                      )}px`,
+                      fontSize: `${String(settings.fontSize * scale)}px`,
+                    }}
                   />
-                ))}
+                )}
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {textDraft && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={confirmText}
+            className="rounded-xl bg-mk-green px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-mk-green/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mk-green motion-reduce:transition-none"
+          >
+            Añadir
+          </button>
+          <button
+            type="button"
+            onClick={() => setTextDraft(null)}
+            className="rounded-xl border border-line px-4 py-1.5 text-sm font-medium text-ink transition hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mk-green motion-reduce:transition-none"
+          >
+            Cancelar
+          </button>
         </div>
       )}
     </section>
   );
 }
 
-/** Marca visual mínima de una anotación ya colocada (posición vía pdfPointToCanvas). */
-function AnnotationMarker({
+/** Renderiza UNA anotación colocada como nodo SVG fiel. (R27) */
+function AnnotationShape({
   annotation,
-  overlay,
+  toPx,
   scale,
+  imageUrl,
+  selected,
 }: {
   annotation: Annotation;
-  overlay: HTMLDivElement | null;
+  toPx: (p: PdfPoint) => { left: number; top: number };
   scale: number;
+  imageUrl: string | undefined;
+  selected: boolean;
 }): JSX.Element | null {
-  if (!overlay) {
-    return null;
+  const stroke = selected ? "#1f9d55" : undefined;
+  switch (annotation.kind) {
+    case "text": {
+      const at = toPx(annotation.at);
+      return (
+        <text
+          data-testid="annotation-text"
+          data-annotation-id={annotation.id}
+          x={at.left}
+          y={at.top}
+          fontSize={annotation.fontSize * scale}
+          fill={cssColor(annotation.color)}
+          style={{ fontFamily: "Helvetica, Arial, sans-serif" }}
+        >
+          {annotation.text}
+        </text>
+      );
+    }
+    case "highlight": {
+      const topLeft = toPx({
+        x: annotation.at.x,
+        y: annotation.at.y + annotation.height,
+      });
+      return (
+        <rect
+          data-testid="annotation-highlight"
+          data-annotation-id={annotation.id}
+          x={topLeft.left}
+          y={topLeft.top}
+          width={annotation.width * scale}
+          height={annotation.height * scale}
+          fill={cssColor(annotation.color)}
+          fillOpacity={annotation.opacity}
+        />
+      );
+    }
+    case "rect": {
+      const topLeft = toPx({
+        x: annotation.at.x,
+        y: annotation.at.y + annotation.height,
+      });
+      return (
+        <rect
+          data-testid="annotation-rect"
+          data-annotation-id={annotation.id}
+          x={topLeft.left}
+          y={topLeft.top}
+          width={annotation.width * scale}
+          height={annotation.height * scale}
+          fill="none"
+          stroke={cssColor(annotation.color)}
+          strokeWidth={annotation.thickness * scale}
+        />
+      );
+    }
+    case "line": {
+      const start = toPx(annotation.start);
+      const end = toPx(annotation.end);
+      return (
+        <line
+          data-testid="annotation-line"
+          data-annotation-id={annotation.id}
+          x1={start.left}
+          y1={start.top}
+          x2={end.left}
+          y2={end.top}
+          stroke={cssColor(annotation.color)}
+          strokeWidth={annotation.thickness * scale}
+        />
+      );
+    }
+    case "freehand": {
+      const points = annotation.points
+        .map((p) => {
+          const px = toPx(p);
+          return `${String(px.left)},${String(px.top)}`;
+        })
+        .join(" ");
+      return (
+        <polyline
+          data-testid="annotation-freehand"
+          data-annotation-id={annotation.id}
+          points={points}
+          fill="none"
+          stroke={cssColor(annotation.color)}
+          strokeWidth={annotation.thickness * scale}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      );
+    }
+    case "image": {
+      const topLeft = toPx({
+        x: annotation.at.x,
+        y: annotation.at.y + annotation.height,
+      });
+      if (!imageUrl) {
+        return null;
+      }
+      return (
+        <image
+          data-testid="annotation-image"
+          data-annotation-id={annotation.id}
+          href={imageUrl}
+          x={topLeft.left}
+          y={topLeft.top}
+          width={annotation.width * scale}
+          height={annotation.height * scale}
+          stroke={stroke}
+        />
+      );
+    }
   }
-  const pageHeightPts = overlay.getBoundingClientRect().height / scale;
-  const anchor: PdfPoint =
-    annotation.kind === "line"
-      ? annotation.start
-      : annotation.kind === "freehand"
-        ? annotation.points[0]
-        : annotation.at;
-  const { left, top } = pdfPointToCanvas(anchor, pageHeightPts, scale);
+}
+
+/** Forma provisional durante un arrastre de creación. (R9, R14) */
+function DraftShape({
+  draft,
+  toPx,
+  scale,
+  settings,
+}: {
+  draft: Draft;
+  toPx: (p: PdfPoint) => { left: number; top: number };
+  scale: number;
+  settings: ToolSettings;
+}): JSX.Element {
+  if (draft.kind === "freehand") {
+    const points = draft.points
+      .map((p) => {
+        const px = toPx(p);
+        return `${String(px.left)},${String(px.top)}`;
+      })
+      .join(" ");
+    return (
+      <polyline
+        data-testid="annotation-draft"
+        points={points}
+        fill="none"
+        stroke={cssColor(settings.color)}
+        strokeWidth={settings.thickness * scale}
+        strokeLinecap="round"
+      />
+    );
+  }
+  const start = toPx(draft.start);
+  const current = toPx(draft.current);
+  if (draft.tool === "line") {
+    return (
+      <line
+        data-testid="annotation-draft"
+        x1={start.left}
+        y1={start.top}
+        x2={current.left}
+        y2={current.top}
+        stroke={cssColor(settings.color)}
+        strokeWidth={settings.thickness * scale}
+      />
+    );
+  }
+  const x = Math.min(start.left, current.left);
+  const y = Math.min(start.top, current.top);
+  const width = Math.abs(current.left - start.left);
+  const height = Math.abs(current.top - start.top);
   return (
-    <span
-      data-testid="annotation-marker"
-      className="absolute h-2 w-2 -translate-x-1 -translate-y-1 rounded-full bg-primary"
-      style={{ left: `${String(left)}px`, top: `${String(top)}px` }}
+    <rect
+      data-testid="annotation-draft"
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      fill={draft.tool === "highlight" ? cssColor(settings.color) : "none"}
+      fillOpacity={draft.tool === "highlight" ? settings.highlightOpacity : 0}
+      stroke={cssColor(settings.color)}
+      strokeWidth={
+        draft.tool === "rect" ? settings.thickness * scale : 1
+      }
+      strokeDasharray={draft.tool === "highlight" ? "4 4" : undefined}
     />
+  );
+}
+
+/** Contorno de selección y tiradores de la anotación seleccionada. (R18) */
+function SelectionOverlay({
+  annotation,
+  toPx,
+  handles,
+}: {
+  annotation: Annotation;
+  toPx: (p: PdfPoint) => { left: number; top: number };
+  handles: { handle: ResizeHandle; point: PdfPoint }[];
+}): JSX.Element {
+  const bounds = annotationBounds(annotation);
+  const topLeft = toPx({ x: bounds.at.x, y: bounds.at.y + bounds.height });
+  const bottomRight = toPx({
+    x: bounds.at.x + bounds.width,
+    y: bounds.at.y,
+  });
+  return (
+    <g data-testid="annotation-selection">
+      <rect
+        x={Math.min(topLeft.left, bottomRight.left)}
+        y={Math.min(topLeft.top, bottomRight.top)}
+        width={Math.abs(bottomRight.left - topLeft.left)}
+        height={Math.abs(bottomRight.top - topLeft.top)}
+        fill="none"
+        stroke="#1f9d55"
+        strokeWidth={1}
+        strokeDasharray="4 3"
+      />
+      {handles.map(({ handle, point }) => {
+        const px = toPx(point);
+        return (
+          <rect
+            key={handle}
+            data-testid={`annotation-handle-${handle}`}
+            x={px.left - HANDLE_SIZE_PX / 2}
+            y={px.top - HANDLE_SIZE_PX / 2}
+            width={HANDLE_SIZE_PX}
+            height={HANDLE_SIZE_PX}
+            fill="#ffffff"
+            stroke="#1f9d55"
+            strokeWidth={1.5}
+          />
+        );
+      })}
+    </g>
   );
 }

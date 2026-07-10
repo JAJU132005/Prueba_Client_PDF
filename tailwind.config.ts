@@ -6,23 +6,39 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: "var(--bg)",
-        surface: "var(--surface)",
-        border: "var(--border)",
-        text: {
-          DEFAULT: "var(--text)",
-          muted: "var(--text-muted)",
+        paper: "var(--paper)",
+        card: "var(--card)",
+        line: "var(--line)",
+        ink: {
+          DEFAULT: "var(--ink)",
+          soft: "var(--ink-soft)",
         },
-        primary: {
-          DEFAULT: "var(--primary)",
-          fg: "var(--primary-fg)",
+        postit: "var(--postit)",
+        tape: "var(--tape)",
+        mk: {
+          green: "var(--mk-green)",
+          orange: "var(--mk-orange)",
+          red: "var(--mk-red)",
         },
-        success: "var(--success)",
-        danger: "var(--danger)",
-        accent: "var(--accent)",
+        hl: {
+          green: "var(--hl-green)",
+          orange: "var(--hl-orange)",
+          red: "var(--hl-red)",
+        },
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        hand: ["var(--font-display)"],
+        scrawl: ["var(--font-scrawl)"],
+        body: ["var(--font-body)"],
+        mono: ["var(--font-mono)"],
+      },
+      borderRadius: {
+        wonky: "var(--radius-wonky)",
+        oval: "var(--radius-oval)",
+        scrap: "var(--radius-scrap)",
+      },
+      boxShadow: {
+        doodle: "4px 5px 0 var(--shadow)",
       },
     },
   },

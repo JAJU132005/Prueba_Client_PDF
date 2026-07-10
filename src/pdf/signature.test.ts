@@ -2,9 +2,16 @@ import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 
 import {
+  buildSignatureAnnotations,
+  computeSignatureBox,
   computeSignaturePlacement,
   computeSignatureSize,
+  formatSignatureDate,
+  moveSignatureBox,
+  resizeSignatureBox,
   signPdf,
+  type FreePlacement,
+  type SignatureExtra,
   type SignOptions,
 } from "@/pdf/signature";
 import {
@@ -193,5 +200,194 @@ describe("signPdf — progreso (R9)", () => {
       expect(p).toBeLessThanOrEqual(1);
     }
     expect(progress[progress.length - 1]).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Colocación libre (#30). Bloques ADITIVOS: no se editan los tests de #24.
+// ---------------------------------------------------------------------------
+
+describe("computeSignatureBox (R1)", () => {
+  it("ancla exacta + aspecto preservado a un ancho objetivo", () => {
+    const box = computeSignatureBox(200, 100, { x: 30, y: 40 }, 50);
+    expect(box).toEqual({ x: 30, y: 40, width: 50, height: 25 });
+  });
+
+  it("mantiene el ancla `at` sin ajuste a rejilla", () => {
+    const box = computeSignatureBox(640, 480, { x: 12.5, y: 99 }, 120);
+    expect(box.x).toBe(12.5);
+    expect(box.y).toBe(99);
+    expect(box.width).toBe(120);
+    expect(box.height).toBeCloseTo(480 * (120 / 640));
+  });
+});
+
+describe("moveSignatureBox (R2)", () => {
+  it("traslada (dx,dy) sin cambiar el tamaño y sin mutar la entrada", () => {
+    const box: FreePlacement = { x: 10, y: 20, width: 50, height: 25 };
+    const moved = moveSignatureBox(box, 5, -8);
+    expect(moved).toEqual({ x: 15, y: 12, width: 50, height: 25 });
+    // La entrada no se muta.
+    expect(box).toEqual({ x: 10, y: 20, width: 50, height: 25 });
+    expect(moved).not.toBe(box);
+  });
+});
+
+describe("resizeSignatureBox — aspecto preservado (R3)", () => {
+  const box: FreePlacement = { x: 100, y: 100, width: 60, height: 30 };
+  const aspectRatio = 2; // width / height
+
+  for (const handle of ["nw", "ne", "sw", "se"] as const) {
+    it(`el tirador ${handle} devuelve width/height === aspectRatio`, () => {
+      const resized = resizeSignatureBox(
+        box,
+        handle,
+        { x: 300, y: 260 },
+        aspectRatio,
+        8,
+      );
+      expect(resized.width / resized.height).toBeCloseTo(aspectRatio);
+    });
+  }
+});
+
+describe("resizeSignatureBox — esquina opuesta fija (R4)", () => {
+  it("arrastrar `nw` mantiene fija la esquina `se`", () => {
+    const box: FreePlacement = { x: 100, y: 100, width: 60, height: 30 };
+    // se = (x+width, y) = (160, 100).
+    const resized = resizeSignatureBox(
+      box,
+      "nw",
+      { x: 40, y: 220 },
+      2,
+      8,
+    );
+    // La esquina se del resultado debe seguir en (160, 100).
+    expect(resized.x + resized.width).toBeCloseTo(160);
+    expect(resized.y).toBeCloseTo(100);
+  });
+
+  it("arrastrar `se` mantiene fija la esquina `nw`", () => {
+    const box: FreePlacement = { x: 100, y: 100, width: 60, height: 30 };
+    // nw = (x, y+height) = (100, 130).
+    const resized = resizeSignatureBox(
+      box,
+      "se",
+      { x: 300, y: 20 },
+      2,
+      8,
+    );
+    expect(resized.x).toBeCloseTo(100);
+    expect(resized.y + resized.height).toBeCloseTo(130);
+  });
+});
+
+describe("resizeSignatureBox — clamp a minSize (R5)", () => {
+  it("con `to` sobre la esquina fija, width y height quedan en minSize", () => {
+    const box: FreePlacement = { x: 100, y: 100, width: 60, height: 60 };
+    // se fija = (160, 100); arrastramos nw casi encima de la esquina fija.
+    const resized = resizeSignatureBox(
+      box,
+      "nw",
+      { x: 160, y: 100 },
+      1, // aspecto 1 → ambos lados = minSize
+      8,
+    );
+    expect(resized.width).toBe(8);
+    expect(resized.height).toBe(8);
+  });
+});
+
+describe("buildSignatureAnnotations — sin extras (R6, R7, R9)", () => {
+  it("pageIndices=[0,2,4] → 3 anotaciones image, una por página", () => {
+    const placement: FreePlacement = { x: 12, y: 34, width: 50, height: 25 };
+    const image = new Uint8Array([1, 2, 3]);
+    const anns = buildSignatureAnnotations(
+      placement,
+      image,
+      [0, 2, 4],
+      [],
+      (p, part) => `id-${String(p)}-${part}`,
+    );
+    expect(anns).toHaveLength(3);
+    expect(anns.every((a) => a.kind === "image")).toBe(true);
+    expect(anns.map((a) => a.pageIndex)).toEqual([0, 2, 4]);
+    for (const a of anns) {
+      expect(a.kind).toBe("image");
+      if (a.kind === "image") {
+        expect(a.at).toEqual({ x: 12, y: 34 });
+        expect(a.width).toBe(50);
+        expect(a.height).toBe(25);
+        expect(a.data).toBe(image);
+      }
+    }
+  });
+});
+
+describe("buildSignatureAnnotations — con extras (R8)", () => {
+  it("pageIndices=[1,3] + 2 extras → 2 image + 4 text con datos de cada extra", () => {
+    const placement: FreePlacement = { x: 0, y: 0, width: 40, height: 20 };
+    const extras: SignatureExtra[] = [
+      {
+        id: "date",
+        kind: "date",
+        text: "2026-07-07",
+        at: { x: 5, y: 6 },
+        fontSize: 12,
+        color: { r: 0, g: 0, b: 0 },
+      },
+      {
+        id: "name",
+        kind: "text",
+        text: "J. Panda",
+        at: { x: 7, y: 8 },
+        fontSize: 14,
+        color: { r: 0.1, g: 0.2, b: 0.3 },
+      },
+    ];
+    const anns = buildSignatureAnnotations(
+      placement,
+      new Uint8Array([9]),
+      [1, 3],
+      extras,
+      (p, part) => `id-${String(p)}-${part}`,
+    );
+    const images = anns.filter((a) => a.kind === "image");
+    const texts = anns.filter((a) => a.kind === "text");
+    expect(images).toHaveLength(2);
+    expect(texts).toHaveLength(4);
+    // Cada extra aparece por cada página con su text/at/fontSize.
+    for (const pageIndex of [1, 3]) {
+      const dateAnn = texts.find(
+        (a) => a.pageIndex === pageIndex && a.kind === "text" && a.text === "2026-07-07",
+      );
+      const nameAnn = texts.find(
+        (a) => a.pageIndex === pageIndex && a.kind === "text" && a.text === "J. Panda",
+      );
+      expect(dateAnn).toBeDefined();
+      expect(nameAnn).toBeDefined();
+      if (dateAnn?.kind === "text") {
+        expect(dateAnn.at).toEqual({ x: 5, y: 6 });
+        expect(dateAnn.fontSize).toBe(12);
+      }
+      if (nameAnn?.kind === "text") {
+        expect(nameAnn.at).toEqual({ x: 7, y: 8 });
+        expect(nameAnn.fontSize).toBe(14);
+      }
+    }
+  });
+});
+
+describe("formatSignatureDate (R10)", () => {
+  it("formatea AAAA-MM-DD de forma determinista (UTC)", () => {
+    expect(formatSignatureDate(new Date("2026-07-07T10:00:00Z"))).toBe(
+      "2026-07-07",
+    );
+  });
+
+  it("rellena con ceros los meses y días de un dígito", () => {
+    expect(formatSignatureDate(new Date("2026-01-05T00:00:00Z"))).toBe(
+      "2026-01-05",
+    );
   });
 });

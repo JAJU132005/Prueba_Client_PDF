@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PageRangeSelector } from "@/components/PageRangeSelector";
 import { Dropzone } from "@/components/Dropzone";
-import { ResourceCostNote } from "@/components/ResourceCostNote";
+import { ErrorBubble } from "@/components/ErrorBubble";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ResultPanel } from "@/components/ResultPanel";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -237,22 +240,7 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
 
   return (
     <section className="py-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-text md:text-4xl">
-            Organizar páginas
-          </h1>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            100% local
-          </span>
-        </div>
-        <p className="max-w-2xl text-base text-text-muted">
-          Reordena las páginas arrastrándolas y marca las que quieras eliminar.
-          Tu archivo se procesa en tu navegador y nunca se sube a ningún
-          servidor.
-        </p>
-        <ResourceCostNote toolId="organize" />
-      </header>
+      <ToolPageHeader toolId="organize" />
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
@@ -260,17 +248,10 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
           onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
-          label="Arrastra tu PDF o haz clic para seleccionar"
+          label="Arrastra tu PDF aquí — ¡prometo no chismosear!"
         />
 
-        {renderError && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {renderError}
-          </div>
-        )}
+        {renderError && <ErrorBubble message={renderError} />}
 
         {model.length > 0 && (
           <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
@@ -287,13 +268,12 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
                     handleDrop(position);
                   }}
                   data-testid={`page-${position}`}
-                  className={`flex cursor-move flex-col gap-2 rounded-xl border p-2 transition ${
-                    item.removed
-                      ? "border-danger/60 bg-danger/5 opacity-50"
-                      : "border-border bg-surface"
-                  }`}
+                  className={`relative flex cursor-move flex-col gap-2 border-[2.2px] border-ink bg-white p-2 shadow-doodle transition ${
+                    position % 2 === 0 ? "-rotate-1" : "rotate-1"
+                  } ${item.removed ? "opacity-50" : ""}`}
                 >
-                  <div className="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-lg bg-bg">
+                  <span className="pin !left-1/2 -translate-x-1/2" aria-hidden="true" />
+                  <div className="flex aspect-[3/4] items-center justify-center overflow-hidden bg-[#cfc9bb]">
                     {url ? (
                       <img
                         src={url}
@@ -303,11 +283,11 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
                         }`}
                       />
                     ) : (
-                      <span className="text-xs text-text-muted">Cargando…</span>
+                      <span className="hand soft text-sm">Cargando…</span>
                     )}
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-text-muted">
+                    <span className="hand soft text-sm">
                       Página {item.originalIndex + 1}
                     </span>
                     <button
@@ -319,10 +299,8 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
                           ? `Conservar la página ${item.originalIndex + 1}`
                           : `Marcar la página ${item.originalIndex + 1} para eliminar`
                       }
-                      className={`rounded-md px-2 py-1 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                        item.removed
-                          ? "text-primary hover:bg-primary/10"
-                          : "text-danger hover:bg-danger/10"
+                      className={`hand cursor-pointer border-none bg-transparent px-2 py-1 text-base ${
+                        item.removed ? "text-mk-green" : "text-mk-red"
                       }`}
                     >
                       {item.removed ? "Conservar" : "Eliminar"}
@@ -336,7 +314,7 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
 
         {model.length > 0 && (
           <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-text">
+            <span className="hand text-lg text-ink">
               Seleccionar páginas a conservar
             </span>
             <PageRangeSelector
@@ -354,12 +332,12 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
               type="button"
               onClick={() => void handleExport()}
               disabled={!canExport}
-              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+              className="btn btn-primary lv-media"
             >
               Exportar
             </button>
             {remaining === 0 && (
-              <span className="text-sm text-danger">
+              <span className="hand text-base text-mk-red">
                 No se pueden eliminar todas las páginas.
               </span>
             )}
@@ -367,57 +345,24 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
         )}
 
         {status === "processing" && (
-          <div className="flex flex-col gap-2" aria-live="polite">
-            <div className="flex items-center justify-between text-sm text-text-muted">
-              <span>Procesando localmente…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={progress}
-              className="h-2 w-full overflow-hidden rounded-full bg-border"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
+          <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
+            <p className="hand m-0 text-xl text-ink">El panda despincha y repincha tus polaroids… <span className="scrawl soft">¡PLOP!</span></p>
+            <ProgressBar value={progress} />
           </div>
         )}
 
         {status === "done" && resultBlob && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
-            <p className="text-sm font-medium text-text">
-              ¡Listo! Tu PDF organizado está preparado.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transition-none"
-              >
-                Descargar
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-              >
-                Organizar otro
-              </button>
-            </div>
-          </div>
+          <ResultPanel
+            fileName="organizado.pdf"
+            onDownload={handleDownload}
+            onReset={handleReset}
+            costLevel="medium"
+            title="¡Listo! Tablón ordenado y caja cerrada."
+          />
         )}
 
         {status === "error" && errorMessage && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {errorMessage}
-          </div>
+          <ErrorBubble message={errorMessage} />
         )}
       </div>
     </section>

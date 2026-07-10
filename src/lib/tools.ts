@@ -20,7 +20,15 @@ export type ToolIconId =
   | "annotate"
   | "sign"
   | "fill-forms"
-  | "ocr";
+  | "ocr"
+  | "redact";
+
+/** Plantilla visual de la herramienta según `design-incoming/README.md`. (#28 R30) */
+export type ToolTemplate =
+  | "01-multi-file"
+  | "02-options"
+  | "03-page-select"
+  | "04-editor-preview";
 
 export interface Tool {
   id: string;
@@ -30,6 +38,7 @@ export interface Tool {
   category: ToolCategory;
   icon: ToolIconId;
   resourceCost: ResourceCost;
+  template: ToolTemplate;
 }
 
 export const TOOLS: readonly Tool[] = [
@@ -40,6 +49,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/unir",
     category: "organizar",
     icon: "merge",
+    template: "01-multi-file",
     resourceCost: "light",
   },
   {
@@ -49,6 +59,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/dividir",
     category: "organizar",
     icon: "split",
+    template: "03-page-select",
     resourceCost: "light",
   },
   {
@@ -58,6 +69,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/rotar",
     category: "organizar",
     icon: "rotate",
+    template: "02-options",
     resourceCost: "light",
   },
   {
@@ -67,6 +79,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/organizar",
     category: "organizar",
     icon: "organize",
+    template: "03-page-select",
     resourceCost: "medium",
   },
   {
@@ -76,6 +89,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/pdf-a-imagenes",
     category: "convertir",
     icon: "pdf-to-images",
+    template: "03-page-select",
     resourceCost: "medium",
   },
   {
@@ -85,6 +99,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/imagenes-a-pdf",
     category: "convertir",
     icon: "images-to-pdf",
+    template: "01-multi-file",
     resourceCost: "light",
   },
   {
@@ -94,6 +109,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/numeros-pagina",
     category: "organizar",
     icon: "page-numbers",
+    template: "04-editor-preview",
     resourceCost: "light",
   },
   {
@@ -103,6 +119,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/marca-agua",
     category: "organizar",
     icon: "watermark",
+    template: "04-editor-preview",
     resourceCost: "light",
   },
   {
@@ -112,6 +129,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/comprimir",
     category: "optimizar",
     icon: "compress",
+    template: "02-options",
     resourceCost: "heavy",
   },
   {
@@ -121,6 +139,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/proteger",
     category: "seguridad",
     icon: "protect",
+    template: "02-options",
     resourceCost: "medium",
   },
   {
@@ -130,6 +149,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/anotar",
     category: "organizar",
     icon: "annotate",
+    template: "04-editor-preview",
     resourceCost: "heavy",
   },
   {
@@ -139,6 +159,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/firmar",
     category: "seguridad",
     icon: "sign",
+    template: "04-editor-preview",
     resourceCost: "medium",
   },
   {
@@ -148,6 +169,7 @@ export const TOOLS: readonly Tool[] = [
     path: "/rellenar-formularios",
     category: "organizar",
     icon: "fill-forms",
+    template: "04-editor-preview",
     resourceCost: "medium",
   },
   {
@@ -157,7 +179,28 @@ export const TOOLS: readonly Tool[] = [
     path: "/reconocer-texto",
     category: "convertir",
     icon: "ocr",
+    template: "02-options",
     resourceCost: "heavy",
+  },
+  {
+    id: "redact",
+    title: "Redactar PDF",
+    description: "Oculta información sensible de forma permanente: las zonas redactadas se rasterizan y no quedan como texto extraíble.",
+    path: "/redactar",
+    category: "seguridad",
+    icon: "redact",
+    template: "04-editor-preview",
+    resourceCost: "medium",
+  },
+  {
+    id: "sign-free",
+    title: "Firmar PDF (colocación libre)",
+    description: "Arrastra tu firma a cualquier posición, ajústala con tiradores y aplícala a varias páginas a la vez.",
+    path: "/firmar-libre",
+    category: "seguridad",
+    icon: "sign",
+    template: "04-editor-preview",
+    resourceCost: "medium",
   },
 ] as const;
 

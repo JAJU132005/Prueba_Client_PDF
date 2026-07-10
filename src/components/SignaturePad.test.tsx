@@ -13,9 +13,9 @@ describe("SignaturePad (R16)", () => {
 
     // Un trazo habilita la confirmación.
     const canvas = screen.getByTestId("signature-pad-canvas");
-    fireEvent.mouseDown(canvas, { clientX: 10, clientY: 10 });
-    fireEvent.mouseMove(canvas, { clientX: 20, clientY: 20 });
-    fireEvent.mouseUp(canvas);
+    fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(canvas, { clientX: 20, clientY: 20 });
+    fireEvent.pointerUp(canvas);
 
     const confirm = screen.getByRole("button", { name: "Usar esta firma" });
     expect(confirm).not.toBeDisabled();

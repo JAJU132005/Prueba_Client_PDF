@@ -13,6 +13,7 @@ import {
   PDFCheckBox,
   PDFDocument,
   PDFDropdown,
+  PDFField,
   PDFRadioGroup,
   PDFTextField,
 } from "pdf-lib";
@@ -22,6 +23,11 @@ import {
   InvalidPdfError,
   type ProgressCallback,
 } from "@/pdf/types";
+import {
+  buildFieldWidgets,
+  type FieldWidget,
+  type RawWidget,
+} from "@/pdf/formOverlay";
 
 /** Tipos de campo AcroForm soportados. (R3–R6) */
 export type FormFieldType = "text" | "checkbox" | "radio" | "dropdown";
@@ -38,6 +44,12 @@ export interface FormFieldInfo {
   options?: readonly string[];
   /** radio/dropdown: opción seleccionada o null. */
   selected?: string | null;
+  /**
+   * Geometría de los widgets del campo (aditivo, #31). Cada widget lleva su
+   * rectángulo en puntos PDF y el índice 0-indexado de su página. Opcional: no
+   * altera la forma de los atributos ya existentes. (R1, R2, R3, R27)
+   */
+  widgets?: readonly FieldWidget[];
 }
 
 /** Modelo del formulario detectado. (R1, R7) */
@@ -60,6 +72,24 @@ export interface FillFormsOptions {
 }
 
 /**
+ * Recolecta la geometría de los widgets de un campo (#31): para cada widget su
+ * rectángulo (`getRectangle()`, puntos PDF) y la clave de su referencia de página
+ * (`w.P()`), y delega en el builder puro `buildFieldWidgets` la resolución
+ * ref→índice y la omisión de widgets no resolubles. (R1, R2, R4, R26, R27)
+ */
+function fieldWidgets(field: PDFField, pageRefIds: string[]): FieldWidget[] {
+  const raws: RawWidget[] = field.acroField.getWidgets().map((w) => {
+    const r = w.getRectangle();
+    const pageRef = w.P();
+    return {
+      rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+      pageRefId: pageRef ? String(pageRef) : null,
+    };
+  });
+  return buildFieldWidgets(raws, pageRefIds);
+}
+
+/**
  * (R1–R7, R20, R24) Carga `input` con pdf-lib y deriva el modelo de formulario:
  * recorre `form.getFields()`, clasifica cada campo por `instanceof` y extrae su
  * valor/estado/opciones. Si el PDF no tiene campos AcroForm devuelve
@@ -79,17 +109,24 @@ export async function detectFormFields(
 
   const form = doc.getForm();
   const fields = form.getFields();
+  // Orden 0-indexado de las páginas por su referencia, para resolver la página
+  // de cada widget en el builder puro `buildFieldWidgets`. (#31, R1)
+  const pageRefIds = doc.getPages().map((p) => String(p.ref));
   const infos: FormFieldInfo[] = [];
 
   for (const field of fields) {
     const name = field.getName(); // (R2)
+    // Geometría de los widgets del campo (#31): rectángulo + página, con la
+    // resolución ref→índice y la omisión de no resolubles en el dominio puro.
+    // (R1, R2, R4, R26, R27)
+    const widgets = fieldWidgets(field, pageRefIds);
 
     if (field instanceof PDFTextField) {
       const text = field.getText() ?? ""; // (R3)
-      infos.push({ name, type: "text", value: text });
+      infos.push({ name, type: "text", value: text, widgets });
     } else if (field instanceof PDFCheckBox) {
       const checked = field.isChecked(); // (R4)
-      infos.push({ name, type: "checkbox", value: "", checked });
+      infos.push({ name, type: "checkbox", value: "", checked, widgets });
     } else if (field instanceof PDFRadioGroup) {
       const options = field.getOptions();
       const selected = field.getSelected() ?? null; // (R5)
@@ -99,6 +136,7 @@ export async function detectFormFields(
         value: selected ?? "",
         options,
         selected,
+        widgets,
       });
     } else if (field instanceof PDFDropdown) {
       const options = field.getOptions();
@@ -110,6 +148,7 @@ export async function detectFormFields(
         value: selected ?? "",
         options,
         selected,
+        widgets,
       });
     }
     // Otros tipos (botones, listas múltiples) se omiten del modelo editable.

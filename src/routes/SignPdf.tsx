@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Dropzone } from "@/components/Dropzone";
+import { ErrorBubble } from "@/components/ErrorBubble";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ResultPanel } from "@/components/ResultPanel";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { LivePreview } from "@/components/LivePreview";
 import { PageRangeSelector } from "@/components/PageRangeSelector";
-import { ResourceCostNote } from "@/components/ResourceCostNote";
 import { SignaturePad } from "@/components/SignaturePad";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
@@ -320,29 +323,12 @@ export function SignPdf({
 
   return (
     <section className="py-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-text md:text-4xl">
-            Firmar PDF
-          </h1>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            100% local
-          </span>
-        </div>
-        <p className="max-w-2xl text-base text-text-muted">
-          Coloca tu firma (súbela como imagen o dibújala) en la página y posición
-          que elijas. Tu archivo se procesa en tu navegador y nunca se sube a
-          ningún servidor.
-        </p>
-        <ResourceCostNote toolId="sign" />
-        {/* Aviso de firma visual, no certificada (R17) */}
-        <div
-          role="note"
-          className="rounded-xl border border-border bg-primary/5 p-3 text-sm text-text-muted"
-        >
-          {SIGNATURE_NOTICE}
-        </div>
-      </header>
+      <ToolPageHeader toolId="sign" />
+
+      {/* Aviso de firma visual, no certificada (R17; texto ÍNTEGRO, #28 R37) */}
+      <div role="note" className="postit mt-4 max-w-xl text-ink">
+        {SIGNATURE_NOTICE}
+      </div>
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
@@ -350,11 +336,11 @@ export function SignPdf({
           onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
-          label="Arrastra tu PDF o haz clic para seleccionar"
+          label="Arrastra tu PDF aquí — ¡prometo no chismosear!"
         />
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="signature-source" className="text-sm font-medium text-text">
+          <label htmlFor="signature-source" className="hand text-lg text-ink">
             Origen de la firma
           </label>
           <select
@@ -363,7 +349,7 @@ export function SignPdf({
             onChange={(event) =>
               handleSourceChange(event.target.value as SignatureSource)
             }
-            className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-full max-w-sm border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
           >
             <option value="upload">Subir imagen</option>
             <option value="draw">Dibujar</option>
@@ -372,7 +358,7 @@ export function SignPdf({
 
         {source === "upload" && (
           <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-text">
+            <span className="hand text-lg text-ink">
               Imagen de firma
             </span>
             <Dropzone
@@ -387,10 +373,10 @@ export function SignPdf({
 
         {source === "draw" && (
           <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-text">Dibuja tu firma</span>
+            <span className="hand text-lg text-ink">Dibuja tu firma</span>
             <SignaturePad onCapture={handleDrawnSignature} />
             {signatureBytes !== null && (
-              <span className="text-sm text-text-muted">
+              <span className="hand soft text-base">
                 Firma dibujada lista.
               </span>
             )}
@@ -398,7 +384,7 @@ export function SignPdf({
         )}
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="signature-position" className="text-sm font-medium text-text">
+          <label htmlFor="signature-position" className="hand text-lg text-ink">
             Posición
           </label>
           <select
@@ -407,7 +393,7 @@ export function SignPdf({
             onChange={(event) =>
               setPosition(event.target.value as WatermarkPosition)
             }
-            className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-full max-w-sm border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
           >
             {WATERMARK_POSITIONS.map((value) => (
               <option key={value} value={value}>
@@ -418,7 +404,7 @@ export function SignPdf({
         </div>
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="signature-width" className="text-sm font-medium text-text">
+          <label htmlFor="signature-width" className="hand text-lg text-ink">
             Ancho de la firma (puntos)
           </label>
           <input
@@ -427,13 +413,13 @@ export function SignPdf({
             min={1}
             value={widthPts}
             onChange={(event) => setWidthPts(Number(event.target.value))}
-            className="w-full max-w-[8rem] rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-full max-w-[8rem] border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
           />
         </div>
 
         {files.length > 0 && pageCount > 0 && (
           <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-text">
+            <span className="hand text-lg text-ink">
               Página donde firmar
             </span>
             <PageRangeSelector
@@ -459,74 +445,41 @@ export function SignPdf({
             type="button"
             onClick={() => void handleSign()}
             disabled={!canSign}
-            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+            className="btn btn-primary lv-media"
           >
             Firmar PDF
           </button>
           {files.length === 0 && (
-            <span className="text-sm text-text-muted">
+            <span className="hand soft text-base">
               Selecciona un PDF para firmar.
             </span>
           )}
           {files.length > 0 && signatureBytes === null && (
-            <span className="text-sm text-text-muted">
+            <span className="hand soft text-base">
               Sube o dibuja una firma.
             </span>
           )}
         </div>
 
         {status === "processing" && (
-          <div className="flex flex-col gap-2" aria-live="polite">
-            <div className="flex items-center justify-between text-sm text-text-muted">
-              <span>Procesando localmente…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={progress}
-              className="h-2 w-full overflow-hidden rounded-full bg-border"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                style={{ width: `${String(progress * 100)}%` }}
-              />
-            </div>
+          <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
+            <p className="hand m-0 text-xl text-ink">El panda sigue tu trazo con la mirada…</p>
+            <ProgressBar value={progress} />
           </div>
         )}
 
         {status === "done" && resultBlob && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
-            <p className="text-sm font-medium text-text">
-              ¡Listo! Tu PDF firmado está preparado.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transition-none"
-              >
-                Descargar
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-              >
-                Firmar otro
-              </button>
-            </div>
-          </div>
+          <ResultPanel
+            fileName="firmado.pdf"
+            onDownload={handleDownload}
+            onReset={handleReset}
+            costLevel="medium"
+            title="¡Listo! Autógrafo estampado."
+          />
         )}
 
         {status === "error" && errorMessage && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {errorMessage}
-          </div>
+          <ErrorBubble message={errorMessage} />
         )}
       </div>
     </section>

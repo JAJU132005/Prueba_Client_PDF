@@ -70,10 +70,15 @@ describe("normalizedBoxFromCanvas (R14)", () => {
       300,
       2,
     );
-    const expected = { pageIndex: 2, left: 0.25, top: 0.2, width: 0.5, height: 0.4 };
-    expect(forward).toEqual(expected);
+    for (const box of [forward, reverse]) {
+      expect(box.pageIndex).toBe(2);
+      expect(box.left).toBeCloseTo(0.25, 10);
+      expect(box.top).toBeCloseTo(0.2, 10);
+      expect(box.width).toBeCloseTo(0.5, 10);
+      expect(box.height).toBeCloseTo(0.4, 10);
+    }
     // El orden del arrastre no altera la caja resultante.
-    expect(reverse).toEqual(expected);
+    expect(reverse).toEqual(forward);
   });
 
   it("acota al lienzo cuando el arrastre se sale de los bordes", () => {
@@ -125,8 +130,9 @@ describe("pagesWithRedactions (R16, R7)", () => {
 describe("redactPdf — SEGURIDAD + PRESERVACIÓN (R3, R4, R6)", () => {
   it("elimina el texto de la página redactada y conserva el de la intacta", async () => {
     const input = await makeTextPdf(["SECRETO-123", "INTACTO-456"]);
-    // Confirma que el texto conocido está presente antes de redactar.
-    const before = await extractPageTexts(input);
+    // Confirma que el texto conocido está presente antes de redactar. Se extrae
+    // sobre una COPIA porque pdfjs transfiere/neutraliza el buffer de entrada.
+    const before = await extractPageTexts(input.slice());
     expect(before[0]).toContain("SECRETO-123");
     expect(before[1]).toContain("INTACTO-456");
 

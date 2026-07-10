@@ -11,6 +11,7 @@ import { organizePdf } from "@/pdf/organize";
 import { addPageNumbers } from "@/pdf/pageNumbers";
 import { probe } from "@/pdf/probe";
 import { protectPdf, type PdfCryptoEngine } from "@/pdf/protectPdf";
+import { redactPdf } from "@/pdf/redact";
 import { rotatePdf } from "@/pdf/rotate";
 import { signPdf } from "@/pdf/signature";
 import { splitPdf } from "@/pdf/split";
@@ -72,6 +73,9 @@ export function createPdfWorkerApi(
     },
     async ocr(pages, options, onProgress) {
       return ocrImages(pages, ocrEngine, options, onProgress);
+    },
+    async redact(input, redactedPages, onProgress) {
+      return redactPdf(input, redactedPages, onProgress);
     },
   };
 }

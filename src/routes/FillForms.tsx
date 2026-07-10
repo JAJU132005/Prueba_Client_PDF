@@ -1,19 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 
+import { AnnotationEditor } from "@/components/AnnotationEditor";
 import { Dropzone } from "@/components/Dropzone";
+import { ErrorBubble } from "@/components/ErrorBubble";
+import { FormFieldOverlay } from "@/components/FormFieldOverlay";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { LivePreview } from "@/components/LivePreview";
-import { ResourceCostNote } from "@/components/ResourceCostNote";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
   type FileValidationConfig,
 } from "@/lib/fileValidation";
+import { pdfjsPageCount } from "@/lib/pdfjsPageCounter";
+import type { Annotation } from "@/pdf/annotate";
+import {
+  DEFAULT_TOOL_SETTINGS,
+  type ToolSettings,
+} from "@/pdf/annotationInteraction";
+import {
+  addAnnotation,
+  createAnnotationState,
+  removeAnnotation,
+  selectAnnotation,
+  updateAnnotation,
+  type AnnotationTool,
+} from "@/pdf/annotationModel";
 import type {
   FieldFill,
   FormFieldInfo,
   FormModel,
 } from "@/pdf/fillForms";
+import { pageIndexForField } from "@/pdf/formOverlay";
+import { countPdfPages, type PageCounter } from "@/pdf/pageCount";
 import type { PageRasterizerFactory } from "@/pdf/rasterize";
 import {
   createPdfClient,
@@ -30,7 +49,14 @@ export const PDF_VALIDATION: FileValidationConfig = {
   maxBytes: DEFAULT_MAX_FILE_BYTES,
 };
 
-/** Aviso visible cuando el PDF no tiene campos de formulario. (R25) */
+/** Validación del Dropzone de imagen de anotación (modo sin campos): JPG/PNG. */
+export const IMAGE_VALIDATION: FileValidationConfig = {
+  allowedExtensions: [".jpg", ".jpeg", ".png"],
+  allowedMimeTypes: ["image/jpeg", "image/png"],
+  maxBytes: DEFAULT_MAX_FILE_BYTES,
+};
+
+/** Aviso visible cuando el PDF no tiene campos de formulario. (R18) */
 export const NO_FIELDS_NOTICE =
   "Este PDF no contiene campos de formulario rellenables.";
 
@@ -45,11 +71,15 @@ function messageForError(error: unknown): string {
         return "El archivo no es un PDF válido.";
       case "FillFormFailedError":
         return "No se pudo rellenar el formulario. Revisa los valores elegidos.";
+      case "AnnotateFailedError":
+        return "No se pudo añadir el texto encima del PDF.";
+      case "InvalidImageError":
+        return "La imagen añadida no es un JPG o PNG válido.";
       default:
         break;
     }
   }
-  return "Ocurrió un error inesperado al rellenar el formulario.";
+  return "Ocurrió un error inesperado al procesar el formulario.";
 }
 
 /** Estado inicial de cada campo, derivado del modelo detectado. */
@@ -108,23 +138,39 @@ function buildFills(
 export interface FillFormsProps {
   /** Cliente inyectable (tests). Por defecto se crea uno con worker real. */
   client?: PdfClient;
-  /** Factoría de rasterizador para LivePreview (tests). */
+  /** Factoría de rasterizador para LivePreview / editor (tests). */
   createRasterizer?: PageRasterizerFactory;
+  /** Contador de páginas inyectable (modo sin campos, tests). Por defecto `pdfjsPageCount`. */
+  countPages?: PageCounter;
+  /** Generador de ids de anotación inyectable (tests deterministas). */
+  createId?: () => string;
 }
 
 /**
- * Herramienta "Rellenar formularios PDF" (#25). Dropzone (1 PDF) →
- * `detectForm` en el worker → si hay campos, editor por campo + toggle de
- * aplanado + "Rellenar y descargar" (op `fillForms` en el worker) → descarga
- * local del Blob. Si no hay campos, informa y ofrece añadir texto encima
- * enlazando a la herramienta de anotación (#23). Previsualiza el PDF cargado con
- * `LivePreview` (#20). Cero red; la UI no contiene lógica de PDF.
+ * Herramienta "Rellenar formularios PDF" (#25 + overlay visual #31). Dropzone
+ * (1 PDF) → `detectForm` en el worker.
+ *
+ * - **Con campos:** editor por campo + toggle de aplanado + overlay visual de
+ *   los widgets sobre la vista previa (`LivePreview` + `FormFieldOverlay`). Clic
+ *   en un marcador enfoca su editor; enfocar un editor destaca su marcador y, si
+ *   el widget está en otra página, la vista previa salta a ella. "Rellenar y
+ *   descargar" → `fillForms` en el worker → descarga local del Blob. (R8–R13,
+ *   R19, R20, R22, R23)
+ * - **Sin campos:** aviso + editor de anotaciones inline (#29) DENTRO de la
+ *   misma ruta → "Añadir texto encima y descargar" incrusta las anotaciones con
+ *   `pdfClient.annotate` (aplanado en el worker) → descarga local. (R14–R18, R22,
+ *   R23)
+ *
+ * Cero red; la UI no contiene lógica de PDF.
  */
 export function FillForms({
   client,
   createRasterizer,
+  countPages,
+  createId,
 }: FillFormsProps = {}): JSX.Element {
   const pdfClient = useMemo(() => client ?? createPdfClient(), [client]);
+  const counter = countPages ?? pdfjsPageCount;
 
   const [files, setFiles] = useState<File[]>([]);
   const [model, setModel] = useState<FormModel | null>(null);
@@ -134,13 +180,47 @@ export function FillForms({
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Estado del overlay visual de campos (#31).
+  const [previewPageIndex, setPreviewPageIndex] = useState(0);
+  const [pageCount, setPageCount] = useState(0);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  // Estado del editor de anotaciones inline (modo sin campos, #31 reusa #29).
+  const [editorState, setEditorState] = useState(createAnnotationState());
+  const [activeTool, setActiveTool] = useState<AnnotationTool | null>(null);
+  const [settings, setSettings] = useState<ToolSettings>(DEFAULT_TOOL_SETTINGS);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imageData, setImageData] = useState<Uint8Array | null>(null);
+
   const detectSeq = useRef(0);
+  /** Registro de los controles de cada campo, para enfocarlos desde el overlay. */
+  const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
     return () => {
       detectSeq.current += 1;
     };
   }, []);
+
+  // Carga los bytes de la imagen de anotación cuando cambia el archivo elegido.
+  useEffect(() => {
+    if (imageFiles.length === 0) {
+      setImageData(null);
+      return;
+    }
+    let cancelled = false;
+    void (async (): Promise<void> => {
+      const bytes = new Uint8Array(await imageFiles[0].arrayBuffer());
+      if (!cancelled) {
+        setImageData(bytes);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [imageFiles]);
+
+  const annotations = editorState.annotations;
 
   async function detect(file: File): Promise<void> {
     const seq = ++detectSeq.current;
@@ -155,6 +235,16 @@ export function FillForms({
       setModel(detected);
       setValues(initialValues(detected));
       setStatus("ready");
+      // El editor de anotaciones inline (sin campos) necesita el nº de páginas.
+      if (!detected.hasFields) {
+        const result = await countPdfPages(bytes, counter);
+        if (seq !== detectSeq.current) {
+          return;
+        }
+        if (result.status === "counted") {
+          setPageCount(result.pages);
+        }
+      }
     } catch (error) {
       if (seq !== detectSeq.current) {
         return;
@@ -174,6 +264,14 @@ export function FillForms({
     setProgress(0);
     setErrorMessage(null);
     setStatus("idle");
+    setPreviewPageIndex(0);
+    setPageCount(0);
+    setFocusedField(null);
+    setEditorState(createAnnotationState());
+    setActiveTool(null);
+    setImageFiles([]);
+    setImageData(null);
+    fieldRefs.current = {};
     if (next.length > 0) {
       void detect(next[0]);
     }
@@ -181,6 +279,21 @@ export function FillForms({
 
   function setFieldValue(name: string, value: FieldValue): void {
     setValues((prev) => ({ ...prev, [name]: value }));
+  }
+
+  /** Enfoca un campo: lo destaca y salta a la página de su widget si procede. (R12, R13) */
+  function handleFieldFocus(name: string): void {
+    setFocusedField(name);
+    const field = model?.fields.find((f) => f.name === name);
+    if (field) {
+      setPreviewPageIndex((current) => pageIndexForField(field, current)); // (R13)
+    }
+  }
+
+  /** Clic en un marcador: enfoca el editor del campo (que a su vez lo destaca). (R11) */
+  function handleMarkerActivate(name: string): void {
+    handleFieldFocus(name);
+    fieldRefs.current[name]?.focus(); // (R11)
   }
 
   async function handleSubmit(): Promise<void> {
@@ -195,7 +308,7 @@ export function FillForms({
       const fills = buildFills(model.fields, values);
       const out = await pdfClient.fillForms(
         bytes,
-        { fills, flatten },
+        { fills, flatten }, // (R19, R20)
         (p) => setProgress(p),
       );
       downloadBlob(pdfBytesToBlob(out), "formulario-relleno.pdf"); // (R23)
@@ -206,27 +319,37 @@ export function FillForms({
     }
   }
 
+  async function handleAnnotateExport(): Promise<void> {
+    if (files.length === 0 || annotations.length === 0) {
+      return; // (R17)
+    }
+    setStatus("processing");
+    setProgress(0);
+    setErrorMessage(null);
+    try {
+      const bytes = new Uint8Array(await files[0].arrayBuffer());
+      const out = await pdfClient.annotate(
+        bytes,
+        annotations, // (R16)
+        (p) => setProgress(p),
+      );
+      downloadBlob(pdfBytesToBlob(out), "documento-anotado.pdf"); // (R23)
+      setStatus("done");
+    } catch (error) {
+      setErrorMessage(messageForError(error));
+      setStatus("error");
+    }
+  }
+
   const hasPdf = files.length > 0;
+  const withFields = model !== null && model.hasFields;
+  const noFields = model !== null && !model.hasFields;
+  const canAnnotateExport =
+    noFields && annotations.length > 0 && status !== "processing";
 
   return (
     <section className="py-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-text md:text-4xl">
-            Rellenar formularios PDF
-          </h1>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            100% local
-          </span>
-        </div>
-        <p className="max-w-2xl text-base text-text-muted">
-          Detecta los campos de un formulario PDF (texto, casillas, opciones y
-          desplegables) y rellénalos. Opcionalmente, aplana el formulario para
-          fijar los valores. Tu archivo se procesa en tu navegador y nunca se
-          sube a ningún servidor.
-        </p>
-        <ResourceCostNote toolId="fill-forms" />
-      </header>
+      <ToolPageHeader toolId="fill-forms" />
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
@@ -234,46 +357,154 @@ export function FillForms({
           onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
-          label="Arrastra tu PDF o haz clic para seleccionar"
+          label="Arrastra tu PDF aquí — ¡prometo no chismosear!"
         />
 
         {status === "detecting" && (
-          <p className="text-sm text-text-muted" aria-live="polite">
+          <p className="text-sm text-ink-soft" aria-live="polite">
             Analizando el formulario…
           </p>
         )}
 
+        {/* Vista previa con overlay visual de campos (R8–R10). El overlay solo
+            se monta en el modo con campos; en el modo sin campos la edición vive
+            en el `AnnotationEditor`. */}
         {hasPdf && (
-          <LivePreview
-            file={files[0]}
-            pageIndex={0}
-            overlays={[]}
-            createRasterizer={createRasterizer}
-          />
+          <>
+            {withFields && pageCount > 1 && (
+              <div
+                className="flex items-center gap-3"
+                role="group"
+                aria-label="Navegación de páginas"
+              >
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={previewPageIndex <= 0}
+                  onClick={() =>
+                    setPreviewPageIndex((i) => Math.max(0, i - 1))
+                  }
+                >
+                  Página anterior
+                </button>
+                <span className="hand text-lg text-ink" aria-live="polite">
+                  Página {previewPageIndex + 1} de {pageCount}
+                </span>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={previewPageIndex >= pageCount - 1}
+                  onClick={() =>
+                    setPreviewPageIndex((i) => Math.min(pageCount - 1, i + 1))
+                  }
+                >
+                  Página siguiente
+                </button>
+              </div>
+            )}
+            <LivePreview
+              file={files[0]}
+              pageIndex={previewPageIndex}
+              overlays={[]}
+              onPageCount={setPageCount}
+              createRasterizer={createRasterizer}
+              renderInteractiveOverlay={
+                withFields
+                  ? ({ pageSize, scale }) => (
+                      <FormFieldOverlay
+                        fields={model.fields}
+                        pageIndex={previewPageIndex}
+                        pageSize={pageSize}
+                        scale={scale}
+                        focusedField={focusedField}
+                        onFocusField={handleMarkerActivate}
+                      />
+                    )
+                  : undefined
+              }
+            />
+          </>
         )}
 
-        {/* Caso sin campos: informar y ofrecer añadir texto encima (R25, R26) */}
-        {model && !model.hasFields && (
-          <div
-            role="note"
-            className="flex flex-col gap-3 rounded-2xl border border-border bg-primary/5 p-4 text-sm text-text-muted"
-          >
-            <p>{NO_FIELDS_NOTICE}</p>
-            <p>
-              Puedes añadir texto encima del documento con la herramienta de
-              anotación.
-            </p>
-            <Link
-              to="/anotar"
-              className="inline-flex w-fit rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transition-none"
+        {/* Caso sin campos: aviso + editor de anotaciones inline (R14, R15, R18) */}
+        {noFields && (
+          <div className="flex flex-col gap-4">
+            <div
+              role="note"
+              className="rounded-2xl border border-line bg-hl-green/50 p-4 text-sm text-ink-soft"
             >
-              Añadir texto encima
-            </Link>
+              <p>{NO_FIELDS_NOTICE}</p>
+              <p>
+                Puedes añadir texto y marcas encima del documento con el editor de
+                abajo.
+              </p>
+            </div>
+
+            {pageCount > 0 && (
+              <>
+                <div className="flex flex-col gap-2">
+                  <span className="hand text-lg text-ink">
+                    Imagen para la herramienta de imagen (opcional)
+                  </span>
+                  <Dropzone
+                    files={imageFiles}
+                    onFilesChange={setImageFiles}
+                    validation={IMAGE_VALIDATION}
+                    multiple={false}
+                    label="Arrastra una imagen (JPG o PNG) o haz clic para seleccionar"
+                  />
+                </div>
+
+                <AnnotationEditor
+                  file={files[0]}
+                  pageCount={pageCount}
+                  annotations={annotations}
+                  activePageIndex={previewPageIndex}
+                  onActivePageChange={setPreviewPageIndex}
+                  activeTool={activeTool}
+                  onToolChange={setActiveTool}
+                  onAddAnnotation={(a: Annotation) =>
+                    setEditorState((prev) => addAnnotation(prev, a))
+                  }
+                  onUpdateAnnotation={(a: Annotation) =>
+                    setEditorState((prev) => updateAnnotation(prev, a))
+                  }
+                  onRemoveAnnotation={(id: string) =>
+                    setEditorState((prev) => removeAnnotation(prev, id))
+                  }
+                  selectedId={editorState.selectedId}
+                  onSelectionChange={(id: string | null) =>
+                    setEditorState((prev) => selectAnnotation(prev, id))
+                  }
+                  settings={settings}
+                  onSettingsChange={setSettings}
+                  imageData={imageData}
+                  createId={createId}
+                  createRasterizer={createRasterizer}
+                />
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleAnnotateExport()}
+                    disabled={!canAnnotateExport}
+                    className="btn btn-primary lv-pesada"
+                  >
+                    Añadir texto encima y descargar
+                  </button>
+                  {annotations.length === 0 && (
+                    <span className="hand soft text-base">
+                      Añade al menos una anotación con las herramientas.
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {/* Caso con campos: editor por campo (R1–R11) */}
-        {model && model.hasFields && (
+        {/* Caso con campos: editor por campo (R19, R20) */}
+        {withFields && (
           <form
             className="flex flex-col gap-4"
             onSubmit={(event) => {
@@ -281,8 +512,8 @@ export function FillForms({
               void handleSubmit();
             }}
           >
-            <fieldset className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
-              <legend className="px-2 text-sm font-medium text-text">
+            <fieldset className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-6">
+              <legend className="px-2 text-sm font-medium text-ink">
                 Campos del formulario
               </legend>
               {model.fields.map((field) => (
@@ -291,11 +522,15 @@ export function FillForms({
                   field={field}
                   value={values[field.name]}
                   onChange={(value) => setFieldValue(field.name, value)}
+                  onFocus={() => handleFieldFocus(field.name)}
+                  registerRef={(el) => {
+                    fieldRefs.current[field.name] = el;
+                  }}
                 />
               ))}
             </fieldset>
 
-            <label className="flex items-center gap-2 text-sm text-text">
+            <label className="flex items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
                 checked={flatten}
@@ -309,7 +544,7 @@ export function FillForms({
               <button
                 type="submit"
                 disabled={status === "processing"}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+                className="btn btn-primary lv-media"
               >
                 Rellenar y descargar
               </button>
@@ -318,42 +553,21 @@ export function FillForms({
         )}
 
         {status === "processing" && (
-          <div className="flex flex-col gap-2" aria-live="polite">
-            <div className="flex items-center justify-between text-sm text-text-muted">
-              <span>Procesando localmente…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={progress}
-              className="h-2 w-full overflow-hidden rounded-full bg-border"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                style={{ width: `${String(progress * 100)}%` }}
-              />
-            </div>
+          <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
+            <p className="hand m-0 text-xl text-ink">El panda pasa tus respuestas a tinta…</p>
+            <ProgressBar value={progress} />
           </div>
         )}
 
         {status === "done" && (
-          <div
-            role="status"
-            className="rounded-2xl border border-border bg-surface p-6 text-sm font-medium text-text"
-          >
-            ¡Listo! Tu formulario relleno se ha descargado.
+          <div role="status" className="card hand max-w-[640px] text-xl text-ink">
+            <span className="hl-media">¡Listo!</span> Tu documento se ha
+            descargado.
           </div>
         )}
 
         {status === "error" && errorMessage && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {errorMessage}
-          </div>
+          <ErrorBubble message={errorMessage} />
         )}
       </div>
     </section>
@@ -364,20 +578,33 @@ interface FieldEditorProps {
   field: FormFieldInfo;
   value: FieldValue | undefined;
   onChange: (value: FieldValue) => void;
+  /** Notifica que este campo recibió el foco (para destacar su marcador). (R12) */
+  onFocus: () => void;
+  /** Registra el control focusable del campo, para enfocarlo desde el overlay. (R11) */
+  registerRef: (el: HTMLElement | null) => void;
 }
 
 /** Editor de un único campo, según su tipo. Presentacional. */
-function FieldEditor({ field, value, onChange }: FieldEditorProps): JSX.Element {
+function FieldEditor({
+  field,
+  value,
+  onChange,
+  onFocus,
+  registerRef,
+}: FieldEditorProps): JSX.Element {
   const labelId = `field-${field.name}`;
 
   if (field.type === "checkbox") {
     return (
-      <label className="flex items-center gap-2 text-sm text-text">
+      <label className="flex items-center gap-2 text-sm text-ink">
         <input
+          ref={registerRef}
           type="checkbox"
           checked={value === true}
           onChange={(event) => onChange(event.target.checked)}
+          onFocus={onFocus}
           className="h-4 w-4"
+          aria-label={field.name}
         />
         {field.name}
       </label>
@@ -387,14 +614,16 @@ function FieldEditor({ field, value, onChange }: FieldEditorProps): JSX.Element 
   if (field.type === "radio" || field.type === "dropdown") {
     return (
       <div className="flex flex-col gap-1">
-        <label htmlFor={labelId} className="text-sm font-medium text-text">
+        <label htmlFor={labelId} className="hand text-lg text-ink">
           {field.name}
         </label>
         <select
+          ref={registerRef}
           id={labelId}
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
-          className="rounded-xl border border-border bg-bg px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          onFocus={onFocus}
+          className="rounded-xl border border-line bg-paper px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mk-green"
         >
           <option value="">— Sin seleccionar —</option>
           {(field.options ?? []).map((option) => (
@@ -409,15 +638,17 @@ function FieldEditor({ field, value, onChange }: FieldEditorProps): JSX.Element 
 
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={labelId} className="text-sm font-medium text-text">
+      <label htmlFor={labelId} className="hand text-lg text-ink">
         {field.name}
       </label>
       <input
+        ref={registerRef}
         id={labelId}
         type="text"
         value={typeof value === "string" ? value : ""}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-xl border border-border bg-bg px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        onFocus={onFocus}
+        className="rounded-xl border border-line bg-paper px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mk-green"
       />
     </div>
   );

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import { signatureCanvasToPng } from "@/lib/signatureCanvasToPng";
+import { usePointerStroke, type StrokePoint } from "@/lib/usePointerStroke";
 
 export interface SignaturePadProps {
   /** Notifica los bytes PNG de la firma dibujada al confirmar. (R16) */
@@ -29,51 +30,34 @@ export function SignaturePad({
   height = 160,
 }: SignaturePadProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const drawingRef = useRef(false);
-  const lastRef = useRef<{ x: number; y: number } | null>(null);
+  const lastRef = useRef<StrokePoint | null>(null);
   const [hasStrokes, setHasStrokes] = useState(false);
 
-  function pointFromEvent(event: React.MouseEvent<HTMLCanvasElement>): {
-    x: number;
-    y: number;
-  } {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return { x: 0, y: 0 };
-    }
-    const rect = canvas.getBoundingClientRect();
-    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
-  }
-
-  function handleMouseDown(event: React.MouseEvent<HTMLCanvasElement>): void {
-    drawingRef.current = true;
-    lastRef.current = pointFromEvent(event);
-    setHasStrokes(true);
-  }
-
-  function handleMouseMove(event: React.MouseEvent<HTMLCanvasElement>): void {
-    if (!drawingRef.current) {
-      return;
-    }
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    const point = pointFromEvent(event);
-    if (ctx && lastRef.current) {
-      ctx.strokeStyle = "#111";
-      ctx.lineWidth = 2;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(lastRef.current.x, lastRef.current.y);
-      ctx.lineTo(point.x, point.y);
-      ctx.stroke();
-    }
-    lastRef.current = point;
-  }
-
-  function handleMouseUp(): void {
-    drawingRef.current = false;
-    lastRef.current = null;
-  }
+  // Captura de trazo compartida (Pointer Events): mismos puntos relativos al
+  // elemento que el patrón inline de ratón anterior. (R8 de #29)
+  const strokeHandlers = usePointerStroke({
+    onStart: (point) => {
+      lastRef.current = point;
+      setHasStrokes(true);
+    },
+    onMove: (point) => {
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext("2d");
+      if (ctx && lastRef.current) {
+        ctx.strokeStyle = "#111";
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(lastRef.current.x, lastRef.current.y);
+        ctx.lineTo(point.x, point.y);
+        ctx.stroke();
+      }
+      lastRef.current = point;
+    },
+    onEnd: () => {
+      lastRef.current = null;
+    },
+  });
 
   function handleClear(): void {
     const canvas = canvasRef.current;
@@ -101,18 +85,18 @@ export function SignaturePad({
         height={height}
         data-testid="signature-pad-canvas"
         aria-label="Lienzo para dibujar la firma"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        className="touch-none rounded-xl border border-border bg-white"
+        onPointerDown={strokeHandlers.onPointerDown}
+        onPointerMove={strokeHandlers.onPointerMove}
+        onPointerUp={strokeHandlers.onPointerUp}
+        onPointerLeave={strokeHandlers.onPointerLeave}
+        className="touch-none rounded-xl border border-line bg-white"
         style={{ width, height, cursor: "crosshair" }}
       />
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
           onClick={handleClear}
-          className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-text transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+          className="rounded-xl border border-line px-4 py-2 text-sm font-medium text-ink transition hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mk-green motion-reduce:transition-none"
         >
           Limpiar
         </button>
@@ -120,7 +104,7 @@ export function SignaturePad({
           type="button"
           onClick={() => void handleConfirm()}
           disabled={!hasStrokes}
-          className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+          className="rounded-xl bg-mk-green px-4 py-2 text-sm font-semibold text-white transition hover:bg-mk-green/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mk-green focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
         >
           Usar esta firma
         </button>

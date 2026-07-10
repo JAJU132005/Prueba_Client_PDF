@@ -13,7 +13,9 @@ import { OrganizePages } from "@/routes/OrganizePages";
 import { PageNumbers } from "@/routes/PageNumbers";
 import { PdfToImages } from "@/routes/PdfToImages";
 import { ProtectUnlock } from "@/routes/ProtectUnlock";
+import { RedactPdf } from "@/routes/RedactPdf";
 import { RotatePdf } from "@/routes/RotatePdf";
+import { SignFreePlacement } from "@/routes/SignFreePlacement";
 import { SignPdf } from "@/routes/SignPdf";
 import { SplitPdf } from "@/routes/SplitPdf";
 import { ToolPlaceholder } from "@/routes/ToolPlaceholder";
@@ -36,8 +38,10 @@ export function App(): JSX.Element {
         <Route path="/proteger" element={<ProtectUnlock />} />
         <Route path="/anotar" element={<EditAnnotatePdf />} />
         <Route path="/firmar" element={<SignPdf />} />
+        <Route path="/firmar-libre" element={<SignFreePlacement />} />
         <Route path="/rellenar-formularios" element={<FillForms />} />
         <Route path="/reconocer-texto" element={<Ocr />} />
+        <Route path="/redactar" element={<RedactPdf />} />
         {TOOLS.filter(
           (tool) =>
             tool.path !== "/unir" &&
@@ -52,8 +56,10 @@ export function App(): JSX.Element {
             tool.path !== "/proteger" &&
             tool.path !== "/anotar" &&
             tool.path !== "/firmar" &&
+            tool.path !== "/firmar-libre" &&
             tool.path !== "/rellenar-formularios" &&
-            tool.path !== "/reconocer-texto",
+            tool.path !== "/reconocer-texto" &&
+            tool.path !== "/redactar",
         ).map((tool) => (
           <Route
             key={tool.id}

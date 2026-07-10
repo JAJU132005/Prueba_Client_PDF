@@ -10,10 +10,32 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 
 import { OcrFailedError, type ProgressCallback } from "@/pdf/types";
 
-/** Idiomas OCR soportados (códigos Tesseract). (R1) */
-export type OcrLanguage = "spa" | "eng" | "fra" | "deu" | "por" | "ita";
+/**
+ * Idiomas OCR soportados (códigos Tesseract). Catálogo ampliado #32 (paridad
+ * iLovePDF): base #26 + idiomas adicionales servidos OFFLINE desde el propio
+ * origen (`/tesseract/lang`), sin CDN. (#32 R1)
+ */
+export type OcrLanguage =
+  // Base #26
+  | "spa"
+  | "eng"
+  | "fra"
+  | "deu"
+  | "por"
+  | "ita"
+  // Ampliación #32
+  | "nld"
+  | "cat"
+  | "glg"
+  | "pol"
+  | "swe"
+  | "tur"
+  | "rus";
 
-/** Lista canónica de idiomas OCR; incluye al menos `spa` y `eng`. (R1) */
+/**
+ * Lista canónica de idiomas OCR; incluye al menos `spa` y `eng`, ≥ 12 entradas
+ * y sin duplicados. (#32 R1, R2)
+ */
 export const OCR_LANGUAGES: readonly OcrLanguage[] = [
   "spa",
   "eng",
@@ -21,9 +43,16 @@ export const OCR_LANGUAGES: readonly OcrLanguage[] = [
   "deu",
   "por",
   "ita",
+  "nld",
+  "cat",
+  "glg",
+  "pol",
+  "swe",
+  "tur",
+  "rus",
 ];
 
-/** Etiquetas legibles por idioma. (R2) */
+/** Etiquetas legibles por idioma. (#32 R3) */
 const OCR_LANGUAGE_LABELS: Record<OcrLanguage, string> = {
   spa: "Español",
   eng: "Inglés",
@@ -31,9 +60,16 @@ const OCR_LANGUAGE_LABELS: Record<OcrLanguage, string> = {
   deu: "Alemán",
   por: "Portugués",
   ita: "Italiano",
+  nld: "Neerlandés",
+  cat: "Catalán",
+  glg: "Gallego",
+  pol: "Polaco",
+  swe: "Sueco",
+  tur: "Turco",
+  rus: "Ruso",
 };
 
-/** Etiqueta legible no vacía de un idioma soportado. (R2) */
+/** Etiqueta legible no vacía de un idioma soportado. (#32 R3) */
 export function ocrLanguageLabel(lang: OcrLanguage): string {
   return OCR_LANGUAGE_LABELS[lang];
 }
@@ -44,8 +80,11 @@ export const OCR_PAGE_SEPARATOR = "\f";
 /** Opacidad de la capa de texto buscable (invisible pero seleccionable). (R16) */
 export const INVISIBLE_TEXT_OPACITY = 0;
 
-/** Tamaño de fuente por defecto de la capa invisible (pt). */
-const INVISIBLE_TEXT_SIZE = 12;
+/**
+ * Tamaño mínimo de fuente de una palabra invisible (pt); evita tamaños ≤ 0
+ * cuando la caja reconocida es muy baja. (#32 R13)
+ */
+export const OCR_MIN_WORD_FONT_SIZE = 4;
 
 /** Bitmap de una página listo para OCR (bytes de imagen PNG/JPEG). */
 export interface OcrImageInput {
@@ -106,9 +145,19 @@ export interface InvisibleTextOp {
 }
 
 /**
+ * Tamaño de fuente derivado de la altura de la caja reconocida de la palabra
+ * (`y1 - y0`), con `OCR_MIN_WORD_FONT_SIZE` como suelo. Pura. (#32 R11, R13)
+ */
+export function wordFontSize(word: OcrWord): number {
+  const boxHeight = word.y1 - word.y0;
+  return boxHeight >= OCR_MIN_WORD_FONT_SIZE ? boxHeight : OCR_MIN_WORD_FONT_SIZE;
+}
+
+/**
  * Dispone una operación por palabra, volteando la coordenada vertical al
- * sistema bottom-left de PDF (`y = pageHeight - word.y1`). Pura, sin pdf-lib.
- * (R14, R15)
+ * sistema bottom-left de PDF (`y = pageHeight - word.y1`) y derivando el tamaño
+ * de fuente de la altura de la caja de cada palabra (`wordFontSize`). Pura, sin
+ * pdf-lib. (R14, R15; #32 R11, R12, R16)
  */
 export function layoutInvisibleText(
   words: readonly OcrWord[],
@@ -118,7 +167,7 @@ export function layoutInvisibleText(
     text: word.text,
     x: word.x0,
     y: pageHeight - word.y1,
-    size: INVISIBLE_TEXT_SIZE,
+    size: wordFontSize(word),
   }));
 }
 

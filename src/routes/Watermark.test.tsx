@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -129,6 +135,9 @@ function fakeClient(addWatermark: PdfClient["addWatermark"]): PdfClient {
     async ocr() {
       return { text: "" };
     },
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -181,18 +190,20 @@ describe("Watermark — estructura (R45, R46, R47, R48, R49, R50, R51, R52, R53,
 
   it("ofrece un control de modo con las opciones text e image (R49)", () => {
     renderAt(fakeClient(async () => new Uint8Array([1])));
-    const select = screen.getByLabelText("Modo de marca") as HTMLSelectElement;
-    const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toEqual(["text", "image"]);
+    const group = screen.getByRole("group", { name: "Modo de marca" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual(["Texto", "Imagen"]);
+    expect(buttons.map((b) => b.getAttribute("aria-pressed"))).toEqual([
+      "true",
+      "false",
+    ]);
   });
 
   it("en modo imagen aparece un control de imagen que valida .jpg/.jpeg/.png (R50)", () => {
     renderAt(fakeClient(async () => new Uint8Array([1])));
     // En modo texto (por defecto) no se muestra el control de imagen.
     expect(screen.queryByText("Imagen de marca")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Modo de marca"), {
-      target: { value: "image" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Imagen" }));
     expect(screen.getByText("Imagen de marca")).toBeInTheDocument();
     expect(IMAGE_VALIDATION.allowedExtensions).toEqual([
       ".jpg",
@@ -281,7 +292,7 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     fireEvent.change(screen.getByLabelText("Ángulo de rotación"), {
       target: { value: "30" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pasar el rodillo" }));
 
     await waitFor(() => {
       expect(capturedInput).toBeDefined();
@@ -298,6 +309,43 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     });
   });
 
+  // Test de integración de plantilla 04 (#28 R35, R41): la acción principal
+  // re-pielada ("Pasar el rodillo") invoca la MISMA operación `addWatermark`
+  // del cliente del worker con las opciones del panel y produce la salida
+  // descargable.
+  it("plantilla 04: la acción re-pielada invoca addWatermark con las opciones del panel y ofrece la descarga (#28 R35, R41)", async () => {
+    let capturedOptions: WatermarkOptions | undefined;
+    const client = fakeClient(async (_input, options) => {
+      capturedOptions = options;
+      return new Uint8Array([9]);
+    });
+    const { container } = renderAt(client);
+
+    addPdf(container, makePdfFile("a.pdf", [1, 2, 3]));
+    await screen.findByRole("button", { name: "Página 1" });
+    fireEvent.change(screen.getByLabelText("Texto de la marca"), {
+      target: { value: "CONFIDENCIAL" },
+    });
+    fireEvent.change(screen.getByLabelText("Opacidad"), {
+      target: { value: "0.3" },
+    });
+    fireEvent.change(screen.getByLabelText("Ángulo de rotación"), {
+      target: { value: "-30" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Pasar el rodillo" }));
+
+    await waitFor(() => {
+      expect(capturedOptions).toBeDefined();
+    });
+    expect(capturedOptions?.mode).toBe("text");
+    expect(capturedOptions?.text).toBe("CONFIDENCIAL");
+    expect(capturedOptions?.opacity).toBe(0.3);
+    expect(capturedOptions?.angle).toBe(-30);
+    expect(
+      await screen.findByRole("button", { name: /descargar resultado/i }),
+    ).toBeInTheDocument();
+  });
+
   it("con un subconjunto seleccionado pasa la spec como pages (R55, R56)", async () => {
     let capturedOptions: WatermarkOptions | undefined;
     const client = fakeClient(async (_input, options) => {
@@ -310,7 +358,7 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     await screen.findByRole("button", { name: "Página 1" });
     // Deselecciona la página 3 → pages esperado "1-2".
     fireEvent.click(screen.getByRole("button", { name: "Página 3" }));
-    fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pasar el rodillo" }));
 
     await waitFor(() => {
       expect(capturedOptions).toBeDefined();
@@ -328,11 +376,9 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
 
     addPdf(container, makePdfFile("a.pdf", [1]));
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.change(screen.getByLabelText("Modo de marca"), {
-      target: { value: "image" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Imagen" }));
     addImage(container, makeImageFile("logo.png", [0x89, 0x50, 0x4e, 0x47]));
-    fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pasar el rodillo" }));
 
     await waitFor(() => {
       expect(capturedOptions).toBeDefined();
@@ -353,11 +399,11 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
 
     addPdf(container, makePdfFile("a.pdf", [1]));
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pasar el rodillo" }));
 
     const bar = await screen.findByRole("progressbar");
     await waitFor(() => {
-      expect(bar).toHaveAttribute("aria-valuenow", "0.5");
+      expect(bar).toHaveAttribute("aria-valuenow", "50");
     });
 
     resolveWatermark?.(new Uint8Array([9]));
@@ -369,9 +415,9 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
 
     addPdf(container, makePdfFile("a.pdf", [1]));
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pasar el rodillo" }));
 
-    const download = await screen.findByRole("button", { name: "Descargar" });
+    const download = await screen.findByRole("button", { name: /descargar resultado/i });
     fireEvent.click(download);
 
     expect(downloadBlob).toHaveBeenCalledTimes(1);
@@ -388,12 +434,12 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
 
     addPdf(container, makePdfFile("a.pdf", [1]));
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pasar el rodillo" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("No se pudo añadir la marca de agua");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
   });
 });
@@ -422,7 +468,7 @@ describe("Watermark — vista previa en vivo (R26, R28)", () => {
     expect(addWatermark).not.toHaveBeenCalled();
 
     // Solo el botón de confirmar ensambla el PDF.
-    fireEvent.click(screen.getByRole("button", { name: "Añadir marca" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pasar el rodillo" }));
     await waitFor(() => expect(addWatermark).toHaveBeenCalledTimes(1));
   });
 

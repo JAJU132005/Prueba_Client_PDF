@@ -1,5 +1,6 @@
 import { PDFDocument } from "pdf-lib";
 
+import type { Annotation, AnnotationColor, PdfPoint } from "@/pdf/annotate";
 import { detectImageType } from "@/pdf/imagesToPdf";
 import {
   InvalidImageError,
@@ -165,4 +166,173 @@ export async function signPdf(
 
   onProgress?.(1); // (R9)
   return doc.save(); // (R4)
+}
+
+// ---------------------------------------------------------------------------
+// Colocación libre (#30). Añadido ADITIVO: geometría pura de arrastrar/
+// redimensionar la firma y puente firma → anotaciones de imagen/texto que se
+// aplanan con `flattenAnnotations` (vía `pdfClient.annotate`). Sin React/DOM.
+// ---------------------------------------------------------------------------
+
+/** Caja de firma en puntos PDF, origen inferior-izquierdo (mismo que pdf-lib). */
+export interface FreePlacement {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Elemento opcional colocable junto a la firma (fecha o texto libre). */
+export interface SignatureExtra {
+  id: string;
+  kind: "date" | "text";
+  /** Texto ya resuelto (la fecha llega formateada por `formatSignatureDate`). */
+  text: string;
+  /** Ancla inferior-izquierda en puntos PDF. */
+  at: PdfPoint;
+  fontSize: number;
+  color: AnnotationColor;
+}
+
+/** Tirador de redimensionado: una de las cuatro esquinas de la caja. */
+export type SignatureHandle = "nw" | "ne" | "sw" | "se";
+
+/** Esquina opuesta a cada tirador (queda FIJA al redimensionar). (R4) */
+const OPPOSITE_HANDLE: Record<SignatureHandle, SignatureHandle> = {
+  nw: "se",
+  ne: "sw",
+  sw: "ne",
+  se: "nw",
+};
+
+/** Coordenadas PDF (y-arriba) de las 4 esquinas de una `FreePlacement`. */
+function boxCorners(box: FreePlacement): Record<SignatureHandle, PdfPoint> {
+  return {
+    sw: { x: box.x, y: box.y },
+    se: { x: box.x + box.width, y: box.y },
+    nw: { x: box.x, y: box.y + box.height },
+    ne: { x: box.x + box.width, y: box.y + box.height },
+  };
+}
+
+/**
+ * Ancla exacta `at` + aspecto preservado a un ancho objetivo: `width ===
+ * targetWidthPts` y `height === imageHeight * (targetWidthPts / imageWidth)`.
+ * Sin ajuste a rejilla. Función pura. (R1)
+ */
+export function computeSignatureBox(
+  imageWidth: number,
+  imageHeight: number,
+  at: PdfPoint,
+  targetWidthPts: number,
+): FreePlacement {
+  return {
+    x: at.x,
+    y: at.y,
+    width: targetWidthPts,
+    height: imageHeight * (targetWidthPts / imageWidth),
+  };
+}
+
+/**
+ * Traslado INMUTABLE de la caja por `(dx, dy)`: `x`/`y` desplazados,
+ * `width`/`height` intactos. No muta la entrada. (R2)
+ */
+export function moveSignatureBox(
+  box: FreePlacement,
+  dx: number,
+  dy: number,
+): FreePlacement {
+  return {
+    x: box.x + dx,
+    y: box.y + dy,
+    width: box.width,
+    height: box.height,
+  };
+}
+
+/**
+ * Redimensiona arrastrando `handle` hasta `to`, con la esquina opuesta FIJA
+ * (R4), relación de aspecto `width / height === aspectRatio` preservada (R3) y
+ * clamps que garantizan `width >= minSize` y `height >= minSize` (R5). Inmutable.
+ */
+export function resizeSignatureBox(
+  box: FreePlacement,
+  handle: SignatureHandle,
+  to: PdfPoint,
+  aspectRatio: number,
+  minSize: number,
+): FreePlacement {
+  const fixed = boxCorners(box)[OPPOSITE_HANDLE[handle]];
+
+  // Ancho/alto brutos según el puntero; se expanden para CUBRIR y luego se
+  // fuerzan al aspecto (height = width / aspectRatio).
+  const rawWidth = Math.abs(to.x - fixed.x);
+  const rawHeight = Math.abs(to.y - fixed.y);
+  let width = Math.max(rawWidth, rawHeight * aspectRatio);
+
+  // Clamp preservando el aspecto: garantiza ambos lados >= minSize. (R5)
+  const minWidth = Math.max(minSize, minSize * aspectRatio);
+  width = Math.max(width, minWidth);
+  const height = width / aspectRatio;
+
+  // La caja crece desde la esquina fija hacia la dirección del tirador.
+  const dirX = to.x >= fixed.x ? 1 : -1;
+  const dirY = to.y >= fixed.y ? 1 : -1;
+  const cornerX = fixed.x + dirX * width;
+  const cornerY = fixed.y + dirY * height;
+
+  return {
+    x: Math.min(fixed.x, cornerX),
+    y: Math.min(fixed.y, cornerY),
+    width,
+    height,
+  };
+}
+
+/**
+ * Puente firma → anotaciones: por cada índice de `pageIndices`, una anotación
+ * `image` con la geometría de `placement` y `data === image` (R6, R7) y, por
+ * cada extra, una anotación `text` con su `text`/`at`/`fontSize`/`color` (R8).
+ * Con `extras` vacío, solo devuelve imágenes (R9). Sin React/DOM. Puro.
+ */
+export function buildSignatureAnnotations(
+  placement: FreePlacement,
+  image: Uint8Array,
+  pageIndices: readonly number[],
+  extras: readonly SignatureExtra[],
+  makeId: (pageIndex: number, part: string) => string,
+): Annotation[] {
+  const annotations: Annotation[] = [];
+  for (const pageIndex of pageIndices) {
+    annotations.push({
+      id: makeId(pageIndex, "image"),
+      pageIndex,
+      kind: "image",
+      at: { x: placement.x, y: placement.y },
+      width: placement.width,
+      height: placement.height,
+      data: image,
+    });
+    for (const extra of extras) {
+      annotations.push({
+        id: makeId(pageIndex, extra.id),
+        pageIndex,
+        kind: "text",
+        at: { x: extra.at.x, y: extra.at.y },
+        text: extra.text,
+        fontSize: extra.fontSize,
+        color: extra.color,
+      });
+    }
+  }
+  return annotations;
+}
+
+/** Fecha determinista `AAAA-MM-DD` (UTC, independiente de la zona horaria). (R10) */
+export function formatSignatureDate(date: Date): string {
+  const year = String(date.getUTCFullYear()).padStart(4, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

@@ -107,7 +107,7 @@ describe("Dropzone", () => {
         validation={validation}
       />,
     );
-    const zone = container.querySelector(".border-dashed") as HTMLElement;
+    const zone = container.querySelector(".dropzone") as HTMLElement;
     const dropped = makeFile("nuevo.pdf", "application/pdf", 200);
     fireEvent.drop(zone, { dataTransfer: { files: [dropped] } });
     expect(onFilesChange).toHaveBeenCalledTimes(1);
@@ -200,7 +200,7 @@ describe("Dropzone", () => {
     ).toBeInTheDocument();
 
     const selector = screen.getByRole("button", {
-      name: /arrastra archivos o haz clic/i,
+      name: /…o elige archivos/i,
     });
     expect(selector).toBeInTheDocument();
     expect(selector.tagName).toBe("BUTTON");

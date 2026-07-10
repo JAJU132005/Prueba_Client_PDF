@@ -123,6 +123,44 @@ describe("detectFormFields", () => {
   });
 });
 
+describe("detectFormFields — geometría de widgets (#31, R1,R2,R3,R27)", () => {
+  it("reporta el rect y el pageIndex de cada campo (R1, R27)", async () => {
+    const model = await detectFormFields(await makeFormPdf());
+    const byName = new Map(model.fields.map((f) => [f.name, f]));
+
+    const name = byName.get("fullName");
+    expect(name?.widgets).toHaveLength(1);
+    const w = name?.widgets?.[0];
+    expect(w?.pageIndex).toBe(0);
+    // El rect refleja el usado en addToPage ({x:20,y:350,w:200,h:20}); pdf-lib lo
+    // infla ~0,5px por el borde del widget, así que comparamos con tolerancia.
+    expect(Math.abs((w?.rect.x ?? 0) - 20)).toBeLessThanOrEqual(1);
+    expect(Math.abs((w?.rect.y ?? 0) - 350)).toBeLessThanOrEqual(1);
+    expect(Math.abs((w?.rect.width ?? 0) - 200)).toBeLessThanOrEqual(1);
+    expect(Math.abs((w?.rect.height ?? 0) - 20)).toBeLessThanOrEqual(1);
+  });
+
+  it("un grupo radio con dos opciones reporta dos widgets (R2)", async () => {
+    const model = await detectFormFields(await makeFormPdf());
+    const color = model.fields.find((f) => f.name === "color");
+    expect(color?.type).toBe("radio");
+    expect(color?.widgets).toHaveLength(2);
+    for (const widget of color?.widgets ?? []) {
+      expect(widget.pageIndex).toBe(0);
+    }
+  });
+
+  it("conserva los atributos existentes junto a widgets (R3, R27)", async () => {
+    const model = await detectFormFields(await makeFilledFormPdf());
+    const text = model.fields.find((f) => f.name === "fullName");
+    // Los atributos de #25 se conservan intactos…
+    expect(text?.type).toBe("text");
+    expect(text?.value).toBe("Ada");
+    // …y `widgets` es un atributo adicional opcional.
+    expect(Array.isArray(text?.widgets)).toBe(true);
+  });
+});
+
 /**
  * Extrae el texto de TODOS los streams del PDF de salida, inflando los que estén
  * comprimidos con FlateDecode (formato zlib) — pdf-lib comprime las apariencias

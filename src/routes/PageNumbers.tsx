@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 
 import { Dropzone } from "@/components/Dropzone";
-import { ResourceCostNote } from "@/components/ResourceCostNote";
+import { ErrorBubble } from "@/components/ErrorBubble";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ResultPanel } from "@/components/ResultPanel";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { LivePreview } from "@/components/LivePreview";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
@@ -200,22 +203,7 @@ export function PageNumbers({
 
   return (
     <section className="py-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-text md:text-4xl">
-            Números de página
-          </h1>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            100% local
-          </span>
-        </div>
-        <p className="max-w-2xl text-base text-text-muted">
-          Añade un número a cada página de tu PDF, eligiendo la posición, el
-          formato, el número de inicio y el tamaño de fuente. Tu archivo se
-          procesa en tu navegador y nunca se sube a ningún servidor.
-        </p>
-        <ResourceCostNote toolId="page-numbers" />
-      </header>
+      <ToolPageHeader toolId="page-numbers" />
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
@@ -223,36 +211,38 @@ export function PageNumbers({
           onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
-          label="Arrastra tu PDF o haz clic para seleccionar"
+          label="Arrastra tu PDF aquí — ¡prometo no chismosear!"
         />
 
         <div className="flex flex-col gap-2">
-          <label
-            htmlFor="page-number-position"
-            className="text-sm font-medium text-text"
+          <span className="hand text-lg text-ink">
+            Posición (toca un post-it)
+          </span>
+          <div
+            role="group"
+            aria-label="Posición"
+            className="grid w-fit grid-cols-3 gap-2.5"
           >
-            Posición
-          </label>
-          <select
-            id="page-number-position"
-            value={position}
-            onChange={(event) =>
-              setPosition(event.target.value as PageNumberPosition)
-            }
-            className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            {PAGE_NUMBER_POSITIONS.map((value) => (
-              <option key={value} value={value}>
+            {PAGE_NUMBER_POSITIONS.map((value, index) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setPosition(value)}
+                aria-pressed={position === value}
+                className={`hand h-11 cursor-pointer border-2 border-black/25 px-2 text-base text-ink shadow-[2px_3px_0_var(--shadow)] ${
+                  index % 2 === 0 ? "-rotate-2" : "rotate-2"
+                } ${position === value ? "bg-hl-green" : "bg-postit"}`}
+              >
                 {POSITION_LABELS[value]}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2">
           <label
             htmlFor="page-number-format"
-            className="text-sm font-medium text-text"
+            className="hand text-lg text-ink"
           >
             Formato
           </label>
@@ -262,7 +252,7 @@ export function PageNumbers({
             onChange={(event) =>
               setFormat(event.target.value as PageNumberFormat)
             }
-            className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-full max-w-sm border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
           >
             {PAGE_NUMBER_FORMATS.map((value) => (
               <option key={value} value={value}>
@@ -275,7 +265,7 @@ export function PageNumbers({
         <div className="flex flex-col gap-2">
           <label
             htmlFor="page-number-start"
-            className="text-sm font-medium text-text"
+            className="hand text-lg text-ink"
           >
             Número de inicio
           </label>
@@ -285,14 +275,14 @@ export function PageNumbers({
             min={0}
             value={startNumber}
             onChange={(event) => setStartNumber(Number(event.target.value))}
-            className="w-full max-w-[8rem] rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-full max-w-[8rem] border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
           />
         </div>
 
         <div className="flex flex-col gap-2">
           <label
             htmlFor="page-number-font-size"
-            className="text-sm font-medium text-text"
+            className="hand text-lg text-ink"
           >
             Tamaño de fuente
           </label>
@@ -302,7 +292,7 @@ export function PageNumbers({
             min={1}
             value={fontSize}
             onChange={(event) => setFontSize(Number(event.target.value))}
-            className="w-full max-w-[8rem] rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-full max-w-[8rem] border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
           />
         </div>
 
@@ -322,69 +312,36 @@ export function PageNumbers({
             type="button"
             onClick={() => void handleAddNumbers()}
             disabled={!canNumber}
-            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+            className="btn btn-primary lv-ligera"
           >
             Añadir números
           </button>
           {files.length === 0 && (
-            <span className="text-sm text-text-muted">
+            <span className="hand soft text-base">
               Selecciona un PDF para numerar.
             </span>
           )}
         </div>
 
         {status === "processing" && (
-          <div className="flex flex-col gap-2" aria-live="polite">
-            <div className="flex items-center justify-between text-sm text-text-muted">
-              <span>Procesando localmente…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={progress}
-              className="h-2 w-full overflow-hidden rounded-full bg-border"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
+          <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
+            <p className="hand m-0 text-xl text-ink">El sello numerador recorre tus páginas… <span className="scrawl soft">¡KA-CHUNK!</span></p>
+            <ProgressBar value={progress} />
           </div>
         )}
 
         {status === "done" && resultBlob && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
-            <p className="text-sm font-medium text-text">
-              ¡Listo! Tu PDF numerado está preparado.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transition-none"
-              >
-                Descargar
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-              >
-                Numerar otro
-              </button>
-            </div>
-          </div>
+          <ResultPanel
+            fileName="numerado.pdf"
+            onDownload={handleDownload}
+            onReset={handleReset}
+            costLevel="light"
+            title="¡Listo! Páginas selladas."
+          />
         )}
 
         {status === "error" && errorMessage && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {errorMessage}
-          </div>
+          <ErrorBubble message={errorMessage} />
         )}
       </div>
     </section>

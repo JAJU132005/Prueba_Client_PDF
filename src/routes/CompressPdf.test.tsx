@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -92,6 +92,9 @@ function fakeClient(compress: PdfClient["compress"]): PdfClient {
     async ocr() {
       return { text: "" };
     },
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -128,7 +131,9 @@ describe("CompressPdf — estructura (R26, R27, R28)", () => {
 
   it("renderiza la nota de consumo 'Pesada' con su frase explicativa (R7)", () => {
     renderAt(fakeClient(async () => result()));
-    expect(screen.getByText(RESOURCE_COST_LABEL.heavy)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/consumo de recursos/i),
+    ).toHaveTextContent(RESOURCE_COST_LABEL.heavy);
     expect(
       screen.getByText(RESOURCE_COST_EXPLANATION.heavy),
     ).toBeInTheDocument();
@@ -136,9 +141,16 @@ describe("CompressPdf — estructura (R26, R27, R28)", () => {
 
   it("ofrece un control de nivel con las opciones low/medium/high (R28)", () => {
     renderAt(fakeClient(async () => result()));
-    const select = screen.getByLabelText("Nivel de calidad") as HTMLSelectElement;
-    const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toEqual(["low", "medium", "high"]);
+    const group = screen.getByRole("group", { name: "Nivel de calidad" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      "Máxima compresión",
+      "Equilibrada",
+      "Máxima calidad",
+    ]);
+    expect(
+      buttons.map((b) => b.getAttribute("aria-pressed")),
+    ).toEqual(["false", "true", "false"]);
   });
 });
 
@@ -154,9 +166,7 @@ describe("CompressPdf — compresión (R29, R30, R31, R32, R33)", () => {
     const { container } = renderAt(client);
 
     addPdf(container, makePdfFile("a.pdf", [1, 2, 3]));
-    fireEvent.change(screen.getByLabelText("Nivel de calidad"), {
-      target: { value: "low" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Máxima compresión" }));
     fireEvent.click(screen.getByRole("button", { name: "Comprimir" }));
 
     await waitFor(() => {
@@ -181,7 +191,7 @@ describe("CompressPdf — compresión (R29, R30, R31, R32, R33)", () => {
 
     const bar = await screen.findByRole("progressbar");
     await waitFor(() => {
-      expect(bar).toHaveAttribute("aria-valuenow", "0.5");
+      expect(bar).toHaveAttribute("aria-valuenow", "50");
     });
 
     resolveCompress?.(result());
@@ -226,7 +236,7 @@ describe("CompressPdf — compresión (R29, R30, R31, R32, R33)", () => {
     addPdf(container, makePdfFile("a.pdf", [1]));
     fireEvent.click(screen.getByRole("button", { name: "Comprimir" }));
 
-    const download = await screen.findByRole("button", { name: "Descargar" });
+    const download = await screen.findByRole("button", { name: /descargar resultado/i });
     expect(screen.getByText("2 KB")).toBeInTheDocument();
     expect(screen.getByText("1 KB")).toBeInTheDocument();
 
@@ -249,7 +259,7 @@ describe("CompressPdf — compresión (R29, R30, R31, R32, R33)", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("No se pudo comprimir el PDF");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
   });
 });

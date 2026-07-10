@@ -42,6 +42,16 @@ export interface LivePreviewProps {
    * formato `n-of-total` de números de página). Opcional. (R23a)
    */
   onPageCount?: (count: number) => void;
+  /**
+   * Capa interactiva opcional renderizada SOBRE la página (recibe el tamaño real
+   * en puntos PDF y la escala). Se monta por encima de los overlays de solo
+   * lectura, con eventos de puntero activos. Por defecto `undefined` → sin capa
+   * interactiva, comportamiento intacto. (#31, R8, R10)
+   */
+  renderInteractiveOverlay?: (ctx: {
+    pageSize: PreviewPageSize;
+    scale: number;
+  }) => React.ReactNode;
 }
 
 /**
@@ -60,6 +70,7 @@ export function LivePreview({
   createRasterizer = createPdfjsPageRasterizer,
   onPageSize,
   onPageCount,
+  renderInteractiveOverlay,
 }: LivePreviewProps): JSX.Element {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -194,17 +205,17 @@ export function LivePreview({
   return (
     <section
       aria-label="Vista previa del resultado"
-      className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm"
+      className="card flex flex-col gap-2"
     >
       {error ? (
         <div
           role="alert"
-          className="rounded-xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
+          className="hand rounded-scrap border-[2.5px] border-mk-red p-4 text-[17px] text-mk-red"
         >
           {error}
         </div>
       ) : (
-        <div className="relative flex min-h-[8rem] items-center justify-center overflow-auto rounded-xl bg-bg p-2">
+        <div className="sheet relative flex min-h-[8rem] !aspect-auto items-center justify-center overflow-auto p-2">
           {imageUrl && (
             <div className="relative">
               <img
@@ -255,11 +266,25 @@ export function LivePreview({
                     />
                   );
                 })}
+              {/* Capa interactiva opcional (#31): por encima de los overlays de
+                  solo lectura, con eventos de puntero activos. (R8, R10) */}
+              {pageSize && renderInteractiveOverlay && (
+                <div
+                  data-testid="interactive-overlay"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    pointerEvents: "auto",
+                  }}
+                >
+                  {renderInteractiveOverlay({ pageSize, scale })}
+                </div>
+              )}
             </div>
           )}
           {loading && (
             <span
-              className="absolute text-sm text-text-muted motion-reduce:animate-none"
+              className="hand soft absolute text-base motion-reduce:animate-none"
               aria-live="polite"
             >
               Generando vista previa…

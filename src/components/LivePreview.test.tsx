@@ -205,6 +205,49 @@ describe("LivePreview — overlays (R14)", () => {
   });
 });
 
+describe("LivePreview — capa interactiva (#31, R8, R10)", () => {
+  it("monta renderInteractiveOverlay con el pageSize real de la imagen (R8, R10)", async () => {
+    const mock = createMockRasterizer();
+    let receivedSize: { width: number; height: number } | null = null;
+    render(
+      <LivePreview
+        file={makePdfFile()}
+        pageIndex={0}
+        overlays={[]}
+        createRasterizer={mock.factory}
+        renderInteractiveOverlay={({ pageSize }) => {
+          receivedSize = pageSize;
+          return <span data-testid="marker">marca</span>;
+        }}
+      />,
+    );
+    const img = await screen.findByRole("img");
+    fireEvent.load(img); // fija pageSize desde el tamaño natural simulado (612x792)
+
+    await waitFor(() =>
+      expect(screen.getByTestId("interactive-overlay")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("marker")).toBeInTheDocument();
+    // 612x792 naturales / scale 1 → tamaño real en puntos PDF.
+    expect(receivedSize).toEqual({ width: 612, height: 792 });
+  });
+
+  it("sin la prop no monta ninguna capa interactiva (R10)", async () => {
+    const mock = createMockRasterizer();
+    render(
+      <LivePreview
+        file={makePdfFile()}
+        pageIndex={0}
+        overlays={[]}
+        createRasterizer={mock.factory}
+      />,
+    );
+    const img = await screen.findByRole("img");
+    fireEvent.load(img);
+    expect(screen.queryByTestId("interactive-overlay")).not.toBeInTheDocument();
+  });
+});
+
 describe("LivePreview — debounce y cancelación (R16, R17)", () => {
   it("coalesce cambios rápidos de pageIndex en una sola rasterización (R16)", async () => {
     vi.useFakeTimers();

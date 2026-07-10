@@ -80,6 +80,9 @@ function fakeClient(
     async ocr() {
       return { text: "" };
     },
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -99,14 +102,14 @@ describe("MergePdf", () => {
     const client = fakeClient(async () => new Uint8Array([1]));
     const { container } = renderPage(client);
 
-    const button = screen.getByRole("button", { name: "Unir" });
+    const button = screen.getByRole("button", { name: "Unir con la grapadora" });
     expect(button).toBeDisabled();
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
-    expect(screen.getByRole("button", { name: "Unir" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Unir con la grapadora" })).toBeDisabled();
 
     addFiles(container, [makePdfFile("b.pdf", [2])]);
-    expect(screen.getByRole("button", { name: "Unir" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Unir con la grapadora" })).toBeEnabled();
   });
 
   it("al pulsar invoca merge con los inputs en el orden mostrado (R24)", async () => {
@@ -118,7 +121,7 @@ describe("MergePdf", () => {
     const { container } = renderPage(client);
 
     addFiles(container, [makePdfFile("a.pdf", [1]), makePdfFile("b.pdf", [2])]);
-    fireEvent.click(screen.getByRole("button", { name: "Unir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unir con la grapadora" }));
 
     await waitFor(() => {
       expect(captured.length).toBe(2);
@@ -138,11 +141,11 @@ describe("MergePdf", () => {
     const { container } = renderPage(client);
 
     addFiles(container, [makePdfFile("a.pdf", [1]), makePdfFile("b.pdf", [2])]);
-    fireEvent.click(screen.getByRole("button", { name: "Unir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unir con la grapadora" }));
 
     const bar = await screen.findByRole("progressbar");
     await waitFor(() => {
-      expect(bar).toHaveAttribute("aria-valuenow", "0.5");
+      expect(bar).toHaveAttribute("aria-valuenow", "50");
     });
 
     resolveMerge?.(new Uint8Array([9]));
@@ -153,10 +156,40 @@ describe("MergePdf", () => {
     const { container } = renderPage(client);
 
     addFiles(container, [makePdfFile("a.pdf", [1]), makePdfFile("b.pdf", [2])]);
-    fireEvent.click(screen.getByRole("button", { name: "Unir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unir con la grapadora" }));
 
     expect(
-      await screen.findByRole("button", { name: "Descargar" }),
+      await screen.findByRole("button", { name: /descargar resultado/i }),
+    ).toBeInTheDocument();
+  });
+
+  // Test de integración de plantilla 01 (#28 R32, R41): la acción re-pielada
+  // invoca la MISMA operación `merge` del cliente del worker con los archivos
+  // en el orden MOSTRADO (tras reordenar) y ofrece la descarga del resultado.
+  it("plantilla 01: la acción re-pielada invoca merge con el orden mostrado y ofrece la descarga (#28 R32, R41)", async () => {
+    const captured: Uint8Array[][] = [];
+    const client = fakeClient(async (inputs) => {
+      captured.push(inputs.map((input) => Uint8Array.from(input)));
+      return new Uint8Array([7]);
+    });
+    const { container } = renderPage(client);
+
+    addFiles(container, [makePdfFile("a.pdf", [1]), makePdfFile("b.pdf", [2])]);
+    // Reordena: sube b.pdf; el orden mostrado pasa a ser b, a.
+    fireEvent.click(
+      screen.getByRole("button", { name: /mover b\.pdf hacia arriba/i }),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Unir con la grapadora" }),
+    );
+
+    await waitFor(() => {
+      expect(captured).toHaveLength(1);
+    });
+    expect(captured[0].map((bytes) => Array.from(bytes))).toEqual([[2], [1]]);
+    expect(
+      await screen.findByRole("button", { name: /descargar resultado/i }),
     ).toBeInTheDocument();
   });
 
@@ -167,12 +200,12 @@ describe("MergePdf", () => {
     const { container } = renderPage(client);
 
     addFiles(container, [makePdfFile("a.pdf", [1]), makePdfFile("b.pdf", [2])]);
-    fireEvent.click(screen.getByRole("button", { name: "Unir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unir con la grapadora" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("no es un PDF válido");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
   });
 });

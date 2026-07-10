@@ -114,6 +114,9 @@ function fakeClient(sign: PdfClient["sign"]): PdfClient {
     async ocr() {
       return { text: "" };
     },
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -284,7 +287,7 @@ describe("SignPdf — descarga local y cero red (R21, R24)", () => {
     );
     fireEvent.click(button);
 
-    const download = await screen.findByRole("button", { name: "Descargar" });
+    const download = await screen.findByRole("button", { name: /descargar resultado/i });
     fireEvent.click(download);
 
     expect(downloadBlob).toHaveBeenCalledTimes(1);
@@ -309,7 +312,7 @@ describe("SignPdf — descarga local y cero red (R21, R24)", () => {
       makeImageFile("firma.png", [0x89, 0x50, 0x4e, 0x47]),
     );
     fireEvent.click(button);
-    const download = await screen.findByRole("button", { name: "Descargar" });
+    const download = await screen.findByRole("button", { name: /descargar resultado/i });
     fireEvent.click(download);
 
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -336,7 +339,7 @@ describe("SignPdf — error de dominio (R23)", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("No se pudo firmar el PDF");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
   });
 });

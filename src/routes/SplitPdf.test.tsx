@@ -84,6 +84,9 @@ function fakeClient(split: PdfClient["split"]): PdfClient {
     async ocr() {
       return { text: "" };
     },
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -103,13 +106,13 @@ describe("SplitPdf", () => {
     const client = fakeClient(async () => new Uint8Array([1]));
     const { container } = renderPage(client);
 
-    expect(screen.getByRole("button", { name: "Dividir" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cortar por la línea punteada" })).toBeDisabled();
 
     // Al añadir el PDF se cuentan sus páginas y aparece el selector con todas
     // seleccionadas por defecto → el botón se habilita.
     addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
     await screen.findByRole("button", { name: "Página 1" });
-    expect(screen.getByRole("button", { name: "Dividir" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Cortar por la línea punteada" })).toBeEnabled();
   });
 
   it("con todas las páginas deseleccionadas 'Dividir' vuelve a deshabilitarse (R34)", async () => {
@@ -122,7 +125,7 @@ describe("SplitPdf", () => {
     // Deselecciona ambas páginas.
     fireEvent.click(screen.getByRole("button", { name: "Página 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Página 2" }));
-    expect(screen.getByRole("button", { name: "Dividir" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cortar por la línea punteada" })).toBeDisabled();
   });
 
   it("al pulsar invoca split con los bytes del PDF y la spec del selector (R35)", async () => {
@@ -139,13 +142,49 @@ describe("SplitPdf", () => {
     await screen.findByRole("button", { name: "Página 1" });
     // Deselecciona la página 3 → spec esperada "1-2".
     fireEvent.click(screen.getByRole("button", { name: "Página 3" }));
-    fireEvent.click(screen.getByRole("button", { name: "Dividir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cortar por la línea punteada" }));
 
     await waitFor(() => {
       expect(capturedBytes).toBeDefined();
     });
     expect(capturedBytes && Array.from(capturedBytes)).toEqual([1, 2, 3]);
     expect(capturedSpec).toBe("1-2");
+  });
+
+  // Test de integración de plantilla 03 (#28 R34, R41): la acción re-pielada
+  // invoca la MISMA operación `split` del cliente del worker con la selección
+  // CANÓNICA construida en el PageRangeSelector visual (casillas .pagecell con
+  // aria-pressed) y ofrece la descarga del resultado.
+  it("plantilla 03: la acción re-pielada invoca split con la selección canónica del selector visual y ofrece la descarga (#28 R34, R41)", async () => {
+    let capturedSpec: string | undefined;
+    const client = fakeClient(async (_input, rangeSpec) => {
+      capturedSpec = rangeSpec;
+      return new Uint8Array([9]);
+    });
+    const { container } = renderPage(client, fakeCounter(4));
+
+    addFiles(container, [makePdfFile("a.pdf", [1, 2, 3, 4])]);
+    await screen.findByRole("button", { name: "Página 1" });
+
+    // Casillas del cuaderno: deselecciona 2 y 3 → selección canónica "1,4".
+    const page2 = screen.getByRole("button", { name: "Página 2" });
+    expect(page2).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(page2);
+    expect(
+      screen.getByRole("button", { name: "Página 2" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Página 3" }));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Cortar por la línea punteada" }),
+    );
+
+    await waitFor(() => {
+      expect(capturedSpec).toBe("1,4");
+    });
+    expect(
+      await screen.findByRole("button", { name: /descargar resultado/i }),
+    ).toBeInTheDocument();
   });
 
   it("con todas las páginas seleccionadas pasa la spec numérica '1-N' (R35)", async () => {
@@ -158,7 +197,7 @@ describe("SplitPdf", () => {
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Dividir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cortar por la línea punteada" }));
 
     await waitFor(() => {
       expect(capturedSpec).toBeDefined();
@@ -180,11 +219,11 @@ describe("SplitPdf", () => {
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Dividir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cortar por la línea punteada" }));
 
     const bar = await screen.findByRole("progressbar");
     await waitFor(() => {
-      expect(bar).toHaveAttribute("aria-valuenow", "0.5");
+      expect(bar).toHaveAttribute("aria-valuenow", "50");
     });
 
     resolveSplit?.(new Uint8Array([9]));
@@ -196,10 +235,10 @@ describe("SplitPdf", () => {
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Dividir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cortar por la línea punteada" }));
 
     expect(
-      await screen.findByRole("button", { name: "Descargar" }),
+      await screen.findByRole("button", { name: /descargar resultado/i }),
     ).toBeInTheDocument();
   });
 
@@ -211,12 +250,12 @@ describe("SplitPdf", () => {
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Dividir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cortar por la línea punteada" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("El rango de páginas no es válido.");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
   });
 });

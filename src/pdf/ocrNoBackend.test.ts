@@ -54,3 +54,32 @@ describe("ocr — invariante cero-red (R20, R26, R27)", () => {
     expect(ocrRouteSource).not.toMatch(/from ["']pdf-lib["']/);
   });
 });
+
+describe("ocr_expanded #32 — invariantes cero-red (R4, R22, R23)", () => {
+  it("ocrPdf.ts, tesseractOcrEngine.ts y Ocr.tsx sin red con datos del usuario (#32 R22)", () => {
+    for (const source of [
+      ocrPdfSource,
+      tesseractEngineSource,
+      ocrRouteSource,
+    ]) {
+      for (const pattern of FORBIDDEN) {
+        expect(source).not.toMatch(pattern);
+      }
+    }
+  });
+
+  it("tesseractOcrEngine.ts referencia /tesseract/lang y ningún CDN (#32 R4)", () => {
+    expect(tesseractEngineSource).toContain("/tesseract/lang");
+    expect(tesseractEngineSource).not.toMatch(/unpkg/i);
+    expect(tesseractEngineSource).not.toMatch(/jsdelivr/i);
+    expect(tesseractEngineSource).not.toMatch(/cdn/i);
+    expect(tesseractEngineSource).not.toMatch(/https?:\/\//i);
+  });
+
+  it("Ocr.tsx no importa pdf-lib ni tesseract.js e invoca client.ocr (#32 R23)", () => {
+    expect(ocrRouteSource).not.toMatch(/from ["']pdf-lib["']/);
+    expect(ocrRouteSource).not.toMatch(/from ["']tesseract\.js["']/);
+    expect(ocrRouteSource).toMatch(/pdfClient\.ocr\(/);
+    expect(ocrRouteSource).not.toMatch(/ocrImages\(/);
+  });
+});

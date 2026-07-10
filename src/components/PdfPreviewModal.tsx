@@ -213,10 +213,10 @@ export function PdfPreviewModal({
         tabIndex={-1}
         onKeyDown={handleKeyDown}
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-full w-full max-w-4xl flex-col gap-4 rounded-2xl bg-surface p-6 shadow-md motion-reduce:transition-none"
+        className="card flex max-h-full w-full max-w-4xl flex-col gap-4 motion-reduce:transition-none"
       >
         <div className="flex items-center justify-between gap-3">
-          <h2 className="truncate text-lg font-semibold text-text">
+          <h2 className="hand truncate text-2xl text-ink">
             {file.name}
           </h2>
           <button
@@ -224,7 +224,7 @@ export function PdfPreviewModal({
             type="button"
             onClick={onClose}
             aria-label="Cerrar vista previa"
-            className="rounded-md px-2 py-1 text-text-muted transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+            className="hand px-2 py-1 text-lg text-mk-red"
           >
             ✕
           </button>
@@ -233,7 +233,7 @@ export function PdfPreviewModal({
         {error && (
           <div
             role="alert"
-            className="rounded-xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
+            className="hand rounded-scrap border-[2.5px] border-mk-red p-4 text-[17px] text-mk-red"
           >
             {error}
           </div>
@@ -247,11 +247,11 @@ export function PdfPreviewModal({
                 onClick={handlePrev}
                 disabled={state.currentPage <= 1}
                 aria-label="Página anterior"
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-text transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40 motion-reduce:transition-none"
+                className="btn !px-3 !py-1 !text-base"
               >
                 ‹
               </button>
-              <span className="text-sm text-text-muted" aria-live="polite">
+              <span className="mono soft text-sm" aria-live="polite">
                 {state.currentPage} de {state.pageCount}
               </span>
               <button
@@ -259,11 +259,11 @@ export function PdfPreviewModal({
                 onClick={handleNext}
                 disabled={state.currentPage >= state.pageCount}
                 aria-label="Página siguiente"
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-text transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40 motion-reduce:transition-none"
+                className="btn !px-3 !py-1 !text-base"
               >
                 ›
               </button>
-              <label className="ml-2 flex items-center gap-2 text-sm text-text-muted">
+              <label className="hand ml-2 flex items-center gap-2 text-base text-ink-soft">
                 Ir a
                 <input
                   type="number"
@@ -274,14 +274,14 @@ export function PdfPreviewModal({
                     handleGoTo(Number.parseInt(event.target.value, 10))
                   }
                   aria-label="Ir a la página"
-                  className="w-16 rounded-md border border-border bg-bg px-2 py-1 text-sm text-text"
+                  className="hand w-16 border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1 text-base text-ink outline-none"
                 />
               </label>
               <button
                 type="button"
                 onClick={handleZoomOut}
                 aria-label="Reducir zoom"
-                className="ml-2 rounded-md px-3 py-1.5 text-sm font-medium text-text transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+                className="btn ml-2 !px-3 !py-1 !text-base"
               >
                 −
               </button>
@@ -289,13 +289,13 @@ export function PdfPreviewModal({
                 type="button"
                 onClick={handleZoomIn}
                 aria-label="Aumentar zoom"
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-text transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+                className="btn !px-3 !py-1 !text-base"
               >
                 +
               </button>
             </div>
 
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-xl bg-bg p-2">
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded border-[2.5px] border-ink bg-white p-2 shadow-doodle">
               {imageUrl ? (
                 <img
                   src={imageUrl}
@@ -303,7 +303,7 @@ export function PdfPreviewModal({
                   className="max-h-full max-w-full object-contain"
                 />
               ) : (
-                <span className="text-sm text-text-muted" aria-live="polite">
+                <span className="hand soft text-base" aria-live="polite">
                   Cargando página…
                 </span>
               )}

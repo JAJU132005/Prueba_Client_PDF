@@ -2,34 +2,475 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =========================================================
+   Cliente-PDF · tokens "El Diario del Panda"
+   Modo claro = cuaderno · Modo oscuro = pizarra
+   El ThemeProvider alterna la clase `dark` en <html>.
+   Fuentes 100% locales (app/public/fonts, ver LICENSE.txt):
+   cero peticiones a orígenes externos de tipografías.
+   ========================================================= */
+
+@font-face {
+  font-family: "Patrick Hand";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/patrick-hand-latin-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Gochi Hand";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/gochi-hand-latin-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Nunito";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/nunito-latin-400-800.woff2") format("woff2");
+}
+
 :root {
-  --bg: #f7f8fa;
-  --surface: #ffffff;
-  --border: #e5e7eb;
-  --text: #0f172a;
-  --text-muted: #64748b;
-  --primary: #4f46e5;
-  --primary-fg: #ffffff;
-  --success: #16a34a;
-  --danger: #dc2626;
-  --accent: #0ea5e9;
+  /* superficies */
+  --paper: #faf7ef;
+  --card: #fffdf6;
+  --line: rgba(96, 140, 190, 0.16);
+  --margin: rgba(224, 100, 90, 0.5);
+
+  /* tinta */
+  --ink: #2d2a26;
+  --ink-soft: #7a7466;
+
+  /* utilería de papelería */
+  --tape: rgba(255, 222, 116, 0.85);
+  --postit: #fff9a8;
+
+  /* marcadores de nivel (texto/íconos) */
+  --mk-green: #5da32c;
+  --mk-orange: #d0821a;
+  --mk-red: #d84438;
+
+  /* subrayador fluorescente (resaltes, nunca fondo de tarjeta) */
+  --hl-green: rgba(150, 222, 80, 0.5);
+  --hl-orange: rgba(255, 183, 77, 0.55);
+  --hl-red: rgba(255, 107, 94, 0.45);
+
+  --shadow: rgba(45, 42, 38, 0.16);
+
+  /* tipografía */
+  --font-display: "Patrick Hand", cursive;
+  --font-scrawl: "Gochi Hand", cursive;
+  --font-body: "Nunito", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* bordes irregulares (efecto hand-drawn) */
+  --radius-wonky: 255px 18px 225px 18px/18px 225px 18px 255px;
+  --radius-oval: 60px 45px 55px 50px/50px 60px 45px 55px;
+  --radius-scrap: 22px 10px 20px 12px/12px 20px 10px 22px;
 }
 
-.dark {
-  --bg: #0e1116;
-  --surface: #161b22;
-  --border: #2a2f37;
-  --text: #e6edf3;
-  --text-muted: #8b949e;
-  --primary: #6366f1;
-  --primary-fg: #ffffff;
-  --success: #22c55e;
-  --danger: #ef4444;
-  --accent: #38bdf8;
+html.dark,
+[data-theme="dark"] {
+  --paper: #282c30;
+  --card: #32373c;
+  --line: rgba(255, 255, 255, 0.06);
+  --margin: rgba(226, 104, 95, 0.55);
+  --ink: #f0ede3;
+  --ink-soft: #b3ad9f;
+  --tape: rgba(255, 222, 116, 0.3);
+  --postit: #6b6428;
+  --mk-green: #a8e75f;
+  --mk-orange: #ffc25e;
+  --mk-red: #ff7a6e;
+  --hl-green: rgba(150, 222, 80, 0.34);
+  --hl-orange: rgba(255, 183, 77, 0.34);
+  --hl-red: rgba(255, 107, 94, 0.34);
+  --shadow: rgba(0, 0, 0, 0.5);
 }
 
+/* ---------- base ---------- */
 body {
-  background-color: var(--bg);
-  color: var(--text);
-  font-family: Inter, system-ui, sans-serif;
+  color: var(--ink);
+  font-family: var(--font-body);
+  background-color: var(--paper);
+  /* hoja rayada (el margen rojo se añade a partir de md, ver abajo) */
+  background-image: repeating-linear-gradient(
+    180deg,
+    transparent 0px,
+    transparent 31px,
+    var(--line) 31px,
+    var(--line) 32px
+  );
+}
+
+@media (min-width: 768px) {
+  body {
+    background-image:
+      linear-gradient(
+        90deg,
+        transparent 86px,
+        var(--margin) 86px,
+        var(--margin) 88px,
+        transparent 88px
+      ),
+      repeating-linear-gradient(
+        180deg,
+        transparent 0px,
+        transparent 31px,
+        var(--line) 31px,
+        var(--line) 32px
+      );
+  }
+}
+
+::selection {
+  background: var(--hl-green);
+}
+
+/* foco de teclado = círculo garabateado (obligatorio en todo interactivo) */
+:focus-visible {
+  outline: 3px dashed var(--ink);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer components {
+  /* ---------- utilidades tipográficas ---------- */
+  .hand {
+    font-family: var(--font-display);
+    font-weight: 400;
+  }
+  .scrawl {
+    font-family: var(--font-scrawl);
+  }
+  .mono {
+    font-family: var(--font-mono);
+  }
+  .soft {
+    color: var(--ink-soft);
+  }
+
+  /* subrayador fluorescente bajo el texto */
+  .hl-ligera {
+    box-shadow: inset 0 -10px 0 var(--hl-green);
+  }
+  .hl-media {
+    box-shadow: inset 0 -10px 0 var(--hl-orange);
+  }
+  .hl-pesada {
+    box-shadow: inset 0 -10px 0 var(--hl-red);
+  }
+
+  /* ---------- componentes ---------- */
+  .card {
+    position: relative;
+    background: var(--card);
+    border: 2.5px solid var(--ink);
+    border-radius: var(--radius-wonky);
+    box-shadow: 4px 5px 0 var(--shadow);
+    padding: 22px 24px;
+  }
+
+  /* botón escrito y encerrado en óvalo a mano */
+  .btn {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-size: 18px;
+    color: var(--ink);
+    background: transparent;
+    border: 2.5px solid var(--ink);
+    border-radius: var(--radius-oval);
+    padding: 6px 20px;
+    cursor: pointer;
+    text-decoration: none;
+    transition:
+      transform 0.15s ease,
+      background 0.15s ease;
+  }
+  .btn:hover {
+    background: var(--hl-orange);
+    transform: rotate(-1deg);
+  }
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+  .btn:disabled:hover {
+    background: transparent;
+    transform: none;
+  }
+  .btn-primary {
+    font-size: 24px;
+    padding: 11px 34px;
+    border-width: 3px;
+    box-shadow: 4px 6px 0 var(--shadow);
+  }
+  .btn-primary.lv-ligera {
+    background: var(--hl-green);
+  }
+  .btn-primary.lv-media {
+    background: var(--hl-orange);
+  }
+  .btn-primary.lv-pesada {
+    background: var(--hl-red);
+  }
+  .btn-primary:disabled {
+    background: transparent;
+  }
+  .btn-ghost {
+    color: var(--ink-soft);
+    border-style: dashed;
+    border-color: var(--ink-soft);
+    font-size: 15px;
+  }
+
+  /* badge de nivel: color + TEXTO + pose del panda (nunca solo color) */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-display);
+    font-size: 15px;
+    padding: 2px 12px;
+    white-space: nowrap;
+    border-radius: 10px 14px 12px 16px/16px 12px 14px 10px;
+  }
+  .badge.lv-ligera {
+    background: var(--hl-green);
+  }
+  .badge.lv-media {
+    background: var(--hl-orange);
+  }
+  .badge.lv-pesada {
+    background: var(--hl-red);
+  }
+
+  /* elementos "pegados" */
+  .tape {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    width: 76px;
+    height: 22px;
+    background: var(--tape);
+    transform: translateX(-50%) rotate(-4deg);
+    border-left: 2px dashed rgba(0, 0, 0, 0.12);
+    border-right: 2px dashed rgba(0, 0, 0, 0.12);
+  }
+  .pin {
+    position: absolute;
+    top: -9px;
+    left: 26px;
+    width: 17px;
+    height: 17px;
+    background: var(--mk-red);
+    border: 2.5px solid var(--ink);
+    border-radius: 50% 45% 55% 50%;
+    box-shadow: 2px 3px 0 var(--shadow);
+  }
+  .clip {
+    position: absolute;
+    top: -15px;
+    right: 28px;
+    width: 15px;
+    height: 32px;
+    border: 3px solid #98a0a8;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    transform: rotate(6deg);
+  }
+
+  /* post-it (aviso móvil de las pesadas, notas) */
+  .postit {
+    padding: 14px 16px;
+    background: var(--postit);
+    border: 2px solid rgba(0, 0, 0, 0.25);
+    transform: rotate(2.5deg);
+    box-shadow: 3px 5px 0 var(--shadow);
+    font-family: var(--font-display);
+    font-size: 17px;
+    line-height: 1.25;
+  }
+
+  /* dropzone (piel del componente Dropzone existente) */
+  .dropzone {
+    position: relative;
+    padding: 30px 24px;
+    text-align: center;
+    border: 3px dashed var(--ink);
+    border-radius: var(--radius-scrap);
+    background: var(--card);
+  }
+
+  /* fila de FileList (nombre · tamaño · nº de páginas · Vista previa) */
+  .filerow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    background: var(--card);
+    border: 2.5px solid var(--ink);
+    border-radius: 16px 8px 14px 10px/10px 14px 8px 16px;
+    box-shadow: 3px 3px 0 var(--shadow);
+  }
+
+  /* barra de progreso = rama de bambú (consume el 0..1 real del worker) */
+  .progress {
+    position: relative;
+    height: 34px;
+    overflow: hidden;
+    border: 3px solid var(--ink);
+    border-radius: 20px 14px 22px 12px/12px 22px 14px 20px;
+    background: var(--card);
+  }
+  .progress-fill {
+    position: absolute;
+    inset: 2px auto 2px 2px;
+    border-radius: 14px;
+    background: repeating-linear-gradient(90deg, #8fd14f 0 34px, #79b84a 34px 38px);
+    transition: width 0.1s linear;
+  }
+  .progress-label {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  /* casilla del selector de páginas (PageRangeSelector) */
+  .pagecell {
+    position: relative;
+    aspect-ratio: 3/4;
+    cursor: pointer;
+    background: #fff;
+    border: 2.5px solid var(--ink);
+    border-radius: 8px 5px 9px 4px/4px 9px 5px 8px;
+    box-shadow: 2px 3px 0 var(--shadow);
+    display: grid;
+    place-items: center;
+    font-family: var(--font-display);
+    font-size: 20px;
+    color: #2d2a26;
+  }
+  .pagecell[aria-pressed="true"] {
+    background: var(--hl-green);
+  }
+  .pagecell .check {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    font-family: var(--font-scrawl);
+    font-size: 22px;
+    color: var(--mk-green);
+  }
+
+  /* hoja de LivePreview */
+  .sheet {
+    position: relative;
+    aspect-ratio: 3/4;
+    background: #fff;
+    border: 2.5px solid var(--ink);
+    border-radius: 4px;
+    box-shadow: 5px 6px 0 var(--shadow);
+    overflow: hidden;
+    background-image: repeating-linear-gradient(
+      180deg,
+      transparent 0px,
+      transparent 23px,
+      rgba(96, 140, 190, 0.14) 23px,
+      rgba(96, 140, 190, 0.14) 24px
+    );
+  }
+
+  /* sello del archivo de salida */
+  .stamp-topsecret {
+    display: inline-block;
+    transform: rotate(-14deg);
+    font-family: var(--font-display);
+    font-size: 21px;
+    color: var(--mk-red);
+    border: 3px double var(--mk-red);
+    border-radius: 6px;
+    padding: 3px 10px;
+    white-space: nowrap;
+  }
+
+  /* contador "Bytes enviados a internet: 0" */
+  .zero {
+    font-family: var(--font-scrawl);
+    color: var(--mk-green);
+    text-decoration: underline wavy var(--mk-green);
+  }
+
+  /* panel de opciones de las plantillas 02/04 */
+  .optpanel {
+    padding: 16px 18px;
+    background: var(--card);
+    border: 2.5px solid var(--ink);
+    border-radius: 18px 10px 20px 8px/8px 20px 10px 18px;
+    box-shadow: 3px 4px 0 var(--shadow);
+  }
+
+  /* slider "regla de escuela" (plantilla 04) */
+  .ruler {
+    width: 100%;
+    accent-color: var(--mk-orange);
+  }
+
+  /* icono garabato de herramienta (home y encabezados) */
+  .tool-icon {
+    font-family: var(--font-scrawl);
+    font-size: 23px;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    width: 54px;
+    height: 54px;
+    border: 2.5px dashed var(--ink);
+    border-radius: 60% 40% 55% 45%/45% 55% 40% 60%;
+  }
+  .bg-lv-ligera {
+    background: var(--hl-green);
+  }
+  .bg-lv-media {
+    background: var(--hl-orange);
+  }
+  .bg-lv-pesada {
+    background: var(--hl-red);
+  }
+
+  /* tarjeta de herramienta del home */
+  .tool {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 218px;
+    padding: 24px 24px 18px 24px;
+    text-decoration: none;
+    color: var(--ink);
+    transform: rotate(var(--rot, 0deg));
+    transition:
+      transform 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+  .tool:hover {
+    transform: translateY(-6px) rotate(0deg);
+    box-shadow: 7px 10px 0 var(--shadow);
+  }
 }

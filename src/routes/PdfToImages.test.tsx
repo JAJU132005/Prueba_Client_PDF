@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -123,9 +129,8 @@ describe("PdfToImages", () => {
 
     expect(screen.getByRole("radio", { name: "PNG" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "JPG" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("combobox", { name: "Resolución" }),
-    ).toBeInTheDocument();
+    const resolution = screen.getByRole("group", { name: "Resolución" });
+    expect(within(resolution).getAllByRole("button")).toHaveLength(3);
   });
 
   it("al Convertir produce n resultados y pasa formato/escala elegidos (R30)", async () => {
@@ -136,9 +141,7 @@ describe("PdfToImages", () => {
 
     // Elige JPG y resolución alta (escala 3).
     fireEvent.click(screen.getByRole("radio", { name: "JPG" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Resolución" }), {
-      target: { value: "high" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Alta" }));
     fireEvent.click(screen.getByRole("button", { name: "Convertir" }));
 
     await waitFor(() => {

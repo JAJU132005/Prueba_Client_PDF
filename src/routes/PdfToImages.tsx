@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { PageRangeSelector } from "@/components/PageRangeSelector";
 import { Dropzone } from "@/components/Dropzone";
-import { ResourceCostNote } from "@/components/ResourceCostNote";
+import { ErrorBubble } from "@/components/ErrorBubble";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { downloadBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -193,22 +195,7 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
 
   return (
     <section className="py-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-text md:text-4xl">
-            PDF a imágenes
-          </h1>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            100% local
-          </span>
-        </div>
-        <p className="max-w-2xl text-base text-text-muted">
-          Convierte cada página de tu PDF en una imagen PNG o JPG. Descárgalas
-          una a una o todas juntas en un ZIP. Tu archivo se procesa en tu
-          navegador y nunca se sube a ningún servidor.
-        </p>
-        <ResourceCostNote toolId="pdf-to-images" />
-      </header>
+      <ToolPageHeader toolId="pdf-to-images" />
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
@@ -216,18 +203,22 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
           onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
-          label="Arrastra tu PDF o haz clic para seleccionar"
+          label="Arrastra tu PDF aquí — ¡prometo no chismosear!"
         />
 
         {pageCount > 0 && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
-            <fieldset className="flex flex-col gap-2">
-              <legend className="text-sm font-medium text-text">Formato</legend>
-              <div className="flex flex-wrap gap-3">
+          <div className="optpanel flex flex-col gap-4">
+            <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+              <legend className="hand p-0 text-lg text-ink">
+                Formato (ruedecita de la cámara)
+              </legend>
+              <div className="flex flex-wrap gap-2">
                 {IMAGE_FORMATS.map((value) => (
                   <label
                     key={value}
-                    className="flex items-center gap-2 text-sm text-text"
+                    className={`btn flex cursor-pointer items-center gap-2 !text-base ${
+                      format === value ? "!bg-hl-orange" : ""
+                    }`}
                   >
                     <input
                       type="radio"
@@ -235,6 +226,7 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
                       value={value}
                       checked={format === value}
                       onChange={() => setFormat(value)}
+                      className="h-4 w-4 accent-[var(--mk-orange)]"
                     />
                     {FORMAT_LABELS[value]}
                   </label>
@@ -243,31 +235,29 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
             </fieldset>
 
             <div className="flex flex-col gap-2">
-              <label
-                htmlFor="resolution"
-                className="text-sm font-medium text-text"
-              >
-                Resolución
-              </label>
-              <select
-                id="resolution"
-                value={resolution}
-                onChange={(event) =>
-                  setResolution(event.target.value as ImageResolution)
-                }
-                className="w-48 rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text"
+              <span className="hand text-lg text-ink">Resolución</span>
+              <div
+                role="group"
+                aria-label="Resolución"
+                className="flex flex-wrap gap-2"
               >
                 {RESOLUTIONS.map((value) => (
-                  <option key={value} value={value}>
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setResolution(value)}
+                    aria-pressed={resolution === value}
+                    className={`btn ${resolution === value ? "!bg-hl-orange" : ""}`}
+                  >
                     {RESOLUTION_LABELS[value]}
-                  </option>
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
             {selection && (
               <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-text">
+                <span className="hand text-lg text-ink">
                   Páginas a convertir
                 </span>
                 <PageRangeSelector
@@ -283,7 +273,7 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
                 type="button"
                 onClick={() => void handleConvert()}
                 disabled={!canConvert}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+                className="btn btn-primary lv-media"
               >
                 Convertir
               </button>
@@ -292,23 +282,9 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
         )}
 
         {status === "processing" && (
-          <div className="flex flex-col gap-2" aria-live="polite">
-            <div className="flex items-center justify-between text-sm text-text-muted">
-              <span>Convirtiendo localmente…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={progress}
-              className="h-2 w-full overflow-hidden rounded-full bg-border"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
+          <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
+            <p className="hand m-0 text-xl text-ink">El panda fotógrafo dispara página a página… <span className="scrawl soft">¡FLASH!</span></p>
+            <ProgressBar value={progress} />
           </div>
         )}
 
@@ -318,26 +294,32 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
               <button
                 type="button"
                 onClick={() => void handleDownloadZip()}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transition-none"
+                className="btn btn-primary lv-media !px-6 !py-2 !text-xl"
               >
                 Descargar ZIP
               </button>
+              <span className="hand soft text-base">
+                la caja de zapatos con todas tus polaroids
+              </span>
             </div>
-            <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            <ul className="grid list-none grid-cols-2 gap-4 p-0 sm:grid-cols-3 md:grid-cols-4">
               {pages.map((page) => (
                 <li
                   key={page.index}
                   data-testid={`page-${page.index}`}
-                  className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-2"
+                  className={`relative flex flex-col gap-2 border-[2.2px] border-ink bg-white p-2 shadow-doodle ${
+                    page.index % 2 === 0 ? "-rotate-1" : "rotate-1"
+                  }`}
                 >
-                  <span className="text-xs text-text-muted">
+                  <span className="pin !left-1/2 -translate-x-1/2" aria-hidden="true" />
+                  <span className="hand soft text-sm">
                     Página {page.index + 1}
                   </span>
                   <button
                     type="button"
                     onClick={() => handleDownloadPage(page)}
                     aria-label={`Descargar la página ${page.index + 1}`}
-                    className="rounded-md px-2 py-1 text-xs font-medium text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="btn !px-3 !py-0.5 !text-base"
                   >
                     Descargar
                   </button>
@@ -348,12 +330,7 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
         )}
 
         {status === "error" && errorMessage && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {errorMessage}
-          </div>
+          <ErrorBubble message={errorMessage} />
         )}
       </div>
     </section>

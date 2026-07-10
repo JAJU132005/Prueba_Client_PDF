@@ -21,38 +21,36 @@ describe("ThemeToggle", () => {
     renderToggle();
     expect(
       screen.getByRole("button", {
-        name: /cambiar a tema (oscuro|claro)/i,
+        name: /modo (pizarra|cuaderno)/i,
       }),
     ).toBeInTheDocument();
   });
 
-  it("parte en tema claro y ofrece cambiar a oscuro (R12)", () => {
+  it("parte en tema claro y ofrece cambiar a oscuro con el rótulo 'modo pizarra ☾' (R12, #28 R4)", () => {
     renderToggle();
     expect(
-      screen.getByRole("button", { name: /cambiar a tema oscuro/i }),
+      screen.getByRole("button", { name: /modo pizarra ☾/i }),
     ).toBeInTheDocument();
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 
-  it("al hacer click alterna el aria-label y la clase 'dark' en <html> (R12, R14)", () => {
+  it("al hacer click alterna el rótulo y la clase 'dark' en <html> (R12, R14, #28 R3/R43)", () => {
     renderToggle();
 
     const toggle = screen.getByRole("button", {
-      name: /cambiar a tema oscuro/i,
+      name: /modo pizarra ☾/i,
     });
     fireEvent.click(toggle);
 
     expect(
-      screen.getByRole("button", { name: /cambiar a tema claro/i }),
+      screen.getByRole("button", { name: /modo cuaderno ☀/i }),
     ).toBeInTheDocument();
     expect(document.documentElement.classList.contains("dark")).toBe(true);
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /cambiar a tema claro/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /modo cuaderno ☀/i }));
 
     expect(
-      screen.getByRole("button", { name: /cambiar a tema oscuro/i }),
+      screen.getByRole("button", { name: /modo pizarra ☾/i }),
     ).toBeInTheDocument();
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });

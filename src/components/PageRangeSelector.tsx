@@ -85,28 +85,28 @@ export function PageRangeSelector({
         <button
           type="button"
           onClick={() => onChange(selectAll(value))}
-          className="rounded-xl border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+          className="btn !px-4 !py-1 !text-base"
         >
           Todas
         </button>
         <button
           type="button"
           onClick={() => onChange(selectEven(value))}
-          className="rounded-xl border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+          className="btn !px-4 !py-1 !text-base"
         >
           Pares
         </button>
         <button
           type="button"
           onClick={() => onChange(selectOdd(value))}
-          className="rounded-xl border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+          className="btn !px-4 !py-1 !text-base"
         >
           Impares
         </button>
         <button
           type="button"
           onClick={() => onChange(invertSelection(value))}
-          className="rounded-xl border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+          className="btn !px-4 !py-1 !text-base"
         >
           Invertir
         </button>
@@ -117,7 +117,7 @@ export function PageRangeSelector({
         <div className="flex flex-col gap-1">
           <label
             htmlFor="range-from"
-            className="text-xs font-medium text-text-muted"
+            className="hand text-sm text-ink-soft"
           >
             Desde
           </label>
@@ -129,13 +129,13 @@ export function PageRangeSelector({
             value={rangeFrom}
             onChange={(event) => setRangeFrom(event.target.value)}
             aria-label="Desde la página"
-            className="w-20 rounded-xl border border-border bg-surface px-3 py-1.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-20 border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1 text-base text-ink outline-none"
           />
         </div>
         <div className="flex flex-col gap-1">
           <label
             htmlFor="range-to"
-            className="text-xs font-medium text-text-muted"
+            className="hand text-sm text-ink-soft"
           >
             Hasta
           </label>
@@ -147,13 +147,13 @@ export function PageRangeSelector({
             value={rangeTo}
             onChange={(event) => setRangeTo(event.target.value)}
             aria-label="Hasta la página"
-            className="w-20 rounded-xl border border-border bg-surface px-3 py-1.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-20 border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1 text-base text-ink outline-none"
           />
         </div>
         <button
           type="button"
           onClick={handleApplyRange}
-          className="rounded-xl border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+          className="btn !px-4 !py-1 !text-base"
         >
           Aplicar rango
         </button>
@@ -162,14 +162,14 @@ export function PageRangeSelector({
       {rangeError && (
         <div
           role="alert"
-          className="rounded-xl border border-danger/40 bg-danger/5 p-2 text-xs text-danger"
+          className="hand rounded-scrap border-[2.5px] border-mk-red p-2 text-base text-mk-red"
         >
           {rangeError}
         </div>
       )}
 
       {/* Casillas/miniaturas clicables (R18, R19) */}
-      <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+      <ul className="grid list-none grid-cols-3 gap-3.5 p-0 sm:grid-cols-4 md:grid-cols-6">
         {indices.map((i) => {
           const selected = value.selected.has(i);
           const url = thumbnails?.[i];
@@ -181,22 +181,21 @@ export function PageRangeSelector({
                 aria-pressed={selected}
                 aria-label={`Página ${String(i + 1)}`}
                 data-testid={`select-page-${String(i)}`}
-                className={`flex aspect-[3/4] w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border bg-cover bg-center text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none ${
-                  selected
-                    ? "border-primary ring-2 ring-primary/40"
-                    : "border-border hover:border-primary/50"
-                }`}
+                className="pagecell w-full overflow-hidden bg-cover bg-center motion-reduce:transition-none"
                 style={url ? { backgroundImage: `url(${url})` } : undefined}
               >
                 <span
-                  className={`rounded-md px-1.5 py-0.5 text-xs ${
-                    url
-                      ? "bg-surface/80 text-text"
-                      : "text-text"
-                  }`}
+                  className={
+                    url ? "rounded bg-white/80 px-1.5 py-0.5" : undefined
+                  }
                 >
                   {i + 1}
                 </span>
+                {selected && (
+                  <span className="check" aria-hidden="true">
+                    ✓
+                  </span>
+                )}
               </button>
             </li>
           );
@@ -208,7 +207,7 @@ export function PageRangeSelector({
         <div className="flex flex-col gap-2">
           <label
             htmlFor="advanced-range"
-            className="text-sm font-medium text-text"
+            className="hand text-base text-ink"
           >
             Rango avanzado (opcional)
           </label>
@@ -220,12 +219,12 @@ export function PageRangeSelector({
               onChange={(event) => setAdvancedText(event.target.value)}
               placeholder="1-3,5"
               aria-label="Especificación de rangos avanzada"
-              className="w-full max-w-xs rounded-xl border border-border bg-surface px-3 py-1.5 text-sm text-text placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="hand w-full max-w-xs border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1 text-base text-ink outline-none placeholder:text-ink-soft"
             />
             <button
               type="button"
               onClick={handleApplyAdvanced}
-              className="rounded-xl border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+              className="btn !px-4 !py-1 !text-base"
             >
               Aplicar selección avanzada
             </button>
@@ -233,7 +232,7 @@ export function PageRangeSelector({
           {advancedError && (
             <div
               role="alert"
-              className="rounded-xl border border-danger/40 bg-danger/5 p-2 text-xs text-danger"
+              className="hand rounded-scrap border-[2.5px] border-mk-red p-2 text-base text-mk-red"
             >
               {advancedError}
             </div>

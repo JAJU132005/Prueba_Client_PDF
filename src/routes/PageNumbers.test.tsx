@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -110,6 +116,9 @@ function fakeClient(addPageNumbers: PdfClient["addPageNumbers"]): PdfClient {
     async ocr() {
       return { text: "" };
     },
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -157,15 +166,15 @@ describe("PageNumbers — estructura (R35, R36, R37, R38, R39, R40, R41, R42, R4
 
   it("ofrece un control de posición con las seis posiciones (R39)", () => {
     renderAt(fakeClient(async () => new Uint8Array([1])));
-    const select = screen.getByLabelText("Posición") as HTMLSelectElement;
-    const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toEqual([
-      "bottom-left",
-      "bottom-center",
-      "bottom-right",
-      "top-left",
-      "top-center",
-      "top-right",
+    const group = screen.getByRole("group", { name: "Posición" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      "Abajo izquierda",
+      "Abajo centro",
+      "Abajo derecha",
+      "Arriba izquierda",
+      "Arriba centro",
+      "Arriba derecha",
     ]);
   });
 
@@ -203,9 +212,7 @@ describe("PageNumbers — numeración (R43, R44, R45, R46, R47)", () => {
     const { container } = renderAt(client);
 
     addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
-    fireEvent.change(screen.getByLabelText("Posición"), {
-      target: { value: "top-right" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Arriba derecha" }));
     fireEvent.change(screen.getByLabelText("Formato"), {
       target: { value: "page-n" },
     });
@@ -244,7 +251,7 @@ describe("PageNumbers — numeración (R43, R44, R45, R46, R47)", () => {
 
     const bar = await screen.findByRole("progressbar");
     await waitFor(() => {
-      expect(bar).toHaveAttribute("aria-valuenow", "0.5");
+      expect(bar).toHaveAttribute("aria-valuenow", "50");
     });
 
     resolveNumber?.(new Uint8Array([9]));
@@ -257,7 +264,7 @@ describe("PageNumbers — numeración (R43, R44, R45, R46, R47)", () => {
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     fireEvent.click(screen.getByRole("button", { name: "Añadir números" }));
 
-    const download = await screen.findByRole("button", { name: "Descargar" });
+    const download = await screen.findByRole("button", { name: /descargar resultado/i });
     fireEvent.click(download);
 
     expect(downloadBlob).toHaveBeenCalledTimes(1);
@@ -278,7 +285,7 @@ describe("PageNumbers — numeración (R43, R44, R45, R46, R47)", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("No se pudo añadir la numeración");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
   });
 });
@@ -291,9 +298,7 @@ describe("PageNumbers — vista previa en vivo (R26, R29)", () => {
     addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
 
     // Ajustes de opciones: ninguno debe ensamblar el PDF final.
-    fireEvent.change(screen.getByLabelText("Posición"), {
-      target: { value: "top-right" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Arriba derecha" }));
     fireEvent.change(screen.getByLabelText("Formato"), {
       target: { value: "page-n" },
     });

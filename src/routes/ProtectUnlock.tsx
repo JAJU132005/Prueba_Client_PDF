@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 
 import { Dropzone } from "@/components/Dropzone";
-import { ResourceCostNote } from "@/components/ResourceCostNote";
+import { ErrorBubble } from "@/components/ErrorBubble";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ResultPanel } from "@/components/ResultPanel";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -125,22 +128,7 @@ export function ProtectUnlock({ client }: ProtectUnlockProps = {}): JSX.Element 
 
   return (
     <section className="py-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-text md:text-4xl">
-            Proteger / desbloquear PDF
-          </h1>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            100% local
-          </span>
-        </div>
-        <p className="max-w-2xl text-base text-text-muted">
-          Cifra un PDF con una contraseña o desbloquéalo aportando la contraseña
-          correcta. Todo ocurre en tu navegador: ni el archivo ni la contraseña
-          se suben a ningún servidor.
-        </p>
-        <ResourceCostNote toolId="protect" />
-      </header>
+      <ToolPageHeader toolId="protect" />
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
@@ -148,16 +136,18 @@ export function ProtectUnlock({ client }: ProtectUnlockProps = {}): JSX.Element 
           onFilesChange={setFiles}
           validation={PDF_VALIDATION}
           multiple={false}
-          label="Arrastra tu PDF o haz clic para seleccionar"
+          label="Arrastra tu PDF aquí — ¡prometo no chismosear!"
         />
 
-        <fieldset className="flex flex-col gap-2">
-          <legend className="text-sm font-medium text-text">Operación</legend>
-          <div className="flex flex-wrap gap-4">
+        <fieldset className="optpanel m-0 max-w-[640px] border-[2.5px]">
+          <legend className="hand px-1 text-lg text-ink">Operación</legend>
+          <div className="flex flex-wrap gap-2">
             {PROTECT_MODES.map((value) => (
               <label
                 key={value}
-                className="flex items-center gap-2 text-sm text-text"
+                className={`btn flex cursor-pointer items-center gap-2 !text-base ${
+                  mode === value ? "!bg-hl-orange" : ""
+                }`}
               >
                 <input
                   type="radio"
@@ -165,7 +155,7 @@ export function ProtectUnlock({ client }: ProtectUnlockProps = {}): JSX.Element 
                   value={value}
                   checked={mode === value}
                   onChange={() => setMode(value)}
-                  className="h-4 w-4 accent-primary"
+                  className="h-4 w-4 accent-[var(--mk-orange)]"
                 />
                 {MODE_LABELS[value]}
               </label>
@@ -176,7 +166,7 @@ export function ProtectUnlock({ client }: ProtectUnlockProps = {}): JSX.Element 
         <div className="flex flex-col gap-2">
           <label
             htmlFor="protect-password"
-            className="text-sm font-medium text-text"
+            className="hand text-lg text-ink"
           >
             Contraseña
           </label>
@@ -186,8 +176,12 @@ export function ProtectUnlock({ client }: ProtectUnlockProps = {}): JSX.Element 
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="new-password"
-            className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            placeholder="escríbela aquí…"
+            className="hand w-full max-w-sm border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-1 py-1.5 text-lg text-ink outline-none placeholder:text-ink-soft"
           />
+          <p className="hand soft m-0 text-base">
+            tu contraseña jamás sale de este navegador, palabra de panda 🤝
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -195,71 +189,42 @@ export function ProtectUnlock({ client }: ProtectUnlockProps = {}): JSX.Element 
             type="button"
             onClick={() => void handleSubmit()}
             disabled={!canSubmit}
-            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+            className="btn btn-primary lv-media"
           >
             {ACTION_LABELS[mode]}
           </button>
           {files.length === 0 && (
-            <span className="text-sm text-text-muted">
+            <span className="hand soft text-base">
               Selecciona un PDF para empezar.
             </span>
           )}
         </div>
 
         {status === "processing" && (
-          <div className="flex flex-col gap-2" aria-live="polite">
-            <div className="flex items-center justify-between text-sm text-text-muted">
-              <span>Procesando localmente…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={progress}
-              className="h-2 w-full overflow-hidden rounded-full bg-border"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
+          <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
+            <p className="hand m-0 text-xl text-ink">El panda gira la llavecita del candado… <span className="scrawl soft">¡CLIC!</span></p>
+            <ProgressBar value={progress} />
           </div>
         )}
 
         {status === "done" && resultBlob && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
-            <p className="text-sm text-text-muted">
+          <ResultPanel
+            fileName={DOWNLOAD_NAMES[resultMode]}
+            onDownload={handleDownload}
+            onReset={handleReset}
+            costLevel="medium"
+            title="¡Listo! Candado en su sitio."
+          >
+            <p className="hand soft mb-0 mt-2 text-base">
               {resultMode === "protect"
                 ? "Tu PDF está protegido. Necesitarás la contraseña para abrirlo."
                 : "Tu PDF está desbloqueado y ya no requiere contraseña."}
             </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transition-none"
-              >
-                Descargar
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-              >
-                Procesar otro
-              </button>
-            </div>
-          </div>
+          </ResultPanel>
         )}
 
         {status === "error" && errorMessage && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {errorMessage}
-          </div>
+          <ErrorBubble message={errorMessage} />
         )}
       </div>
     </section>

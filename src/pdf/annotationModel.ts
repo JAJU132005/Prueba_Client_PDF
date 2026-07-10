@@ -66,6 +66,24 @@ export function removeAnnotation(
   };
 }
 
+/**
+ * Reemplaza la anotación con el mismo `id` por `annotation` (mover/redimensionar/
+ * editar texto), devolviendo un estado NUEVO sin mutar la entrada. Conserva el
+ * orden y la selección. Si no existe ninguna con ese `id`, el estado no cambia.
+ * (R19, R35)
+ */
+export function updateAnnotation(
+  state: AnnotationEditorState,
+  annotation: Annotation,
+): AnnotationEditorState {
+  return {
+    annotations: state.annotations.map((a) =>
+      a.id === annotation.id ? annotation : a,
+    ),
+    selectedId: state.selectedId,
+  };
+}
+
 /** Marca `id` como seleccionada (o `null` para deseleccionar). */
 export function selectAnnotation(
   state: AnnotationEditorState,

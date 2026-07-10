@@ -14,3 +14,42 @@ if (typeof Blob.prototype.arrayBuffer !== "function") {
     });
   };
 }
+
+// jsdom (v24) no implementa `PointerEvent`, por lo que `fireEvent.pointerDown`
+// crea un `Event` genérico que PIERDE `clientX/clientY` (llegan como NaN). Se
+// polifilla como subclase de `MouseEvent` (sí soportado por jsdom, ya usado por
+// los tests de ratón) para que los gestos de puntero de los tests de UI lleven
+// coordenadas reales. Solo afecta al entorno de test; producción usa el
+// PointerEvent nativo del navegador.
+if (
+  typeof MouseEvent === "function" &&
+  typeof (globalThis as { PointerEvent?: unknown }).PointerEvent !== "function"
+) {
+  class PointerEventPolyfill extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+    readonly isPrimary: boolean;
+
+    constructor(type: string, params: PointerEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.pointerType = params.pointerType ?? "mouse";
+      this.isPrimary = params.isPrimary ?? true;
+    }
+  }
+  (globalThis as { PointerEvent: unknown }).PointerEvent = PointerEventPolyfill;
+}
+
+// jsdom no implementa `setPointerCapture`/`releasePointerCapture`; los gestos
+// de puntero los invocan de forma defensiva. Se añaden como no-ops.
+if (
+  typeof Element !== "undefined" &&
+  typeof Element.prototype.setPointerCapture !== "function"
+) {
+  Element.prototype.setPointerCapture = function (): void {
+    // no-op en jsdom
+  };
+  Element.prototype.releasePointerCapture = function (): void {
+    // no-op en jsdom
+  };
+}

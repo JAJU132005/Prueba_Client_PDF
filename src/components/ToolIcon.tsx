@@ -107,6 +107,13 @@ const ICON_PATHS: Record<ToolIconId, JSX.Element> = {
       <path d="M14 9h2a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-2l3 3" />
     </>
   ),
+  redact: (
+    <>
+      <path d="M6 3h9l3 3v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+      <rect x="8" y="9" width="8" height="3" rx="0.5" fill="currentColor" />
+      <rect x="8" y="14" width="5" height="3" rx="0.5" fill="currentColor" />
+    </>
+  ),
 };
 
 export function ToolIcon(props: {

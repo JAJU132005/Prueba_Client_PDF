@@ -119,6 +119,9 @@ describe("createPdfClient", () => {
       async ocr(): Promise<OcrResult> {
         return { text: "" };
       },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
     };
     const client = createPdfClient(failingApi);
 
@@ -181,6 +184,9 @@ describe("createPdfClient — merge", () => {
       },
       async ocr(): Promise<OcrResult> {
         return { text: "" };
+      },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
       },
     };
     return createPdfClient(api);
@@ -266,6 +272,9 @@ describe("createPdfClient — split", () => {
       },
       async ocr(): Promise<OcrResult> {
         return { text: "" };
+      },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
       },
     };
     return createPdfClient(api);
@@ -363,6 +372,9 @@ describe("createPdfClient — rotate", () => {
       },
       async ocr(): Promise<OcrResult> {
         return { text: "" };
+      },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
       },
     };
     return createPdfClient(api);
@@ -464,6 +476,9 @@ describe("createPdfClient — organize", () => {
       async ocr(): Promise<OcrResult> {
         return { text: "" };
       },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
     };
     return createPdfClient(api);
   }
@@ -560,6 +575,9 @@ describe("createPdfClient — imagesToPdf", () => {
       },
       async ocr(): Promise<OcrResult> {
         return { text: "" };
+      },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
       },
     };
     return createPdfClient(api);
@@ -667,6 +685,9 @@ describe("createPdfClient — addPageNumbers", () => {
       },
       async ocr(): Promise<OcrResult> {
         return { text: "" };
+      },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
       },
     };
     return createPdfClient(api);
@@ -802,6 +823,9 @@ describe("createPdfClient — addWatermark", () => {
       async ocr(): Promise<OcrResult> {
         return { text: "" };
       },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
     };
     return createPdfClient(api);
   }
@@ -885,6 +909,9 @@ describe("createPdfClient — compress", () => {
       },
       async ocr(): Promise<OcrResult> {
         return { text: "" };
+      },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
       },
     };
     return createPdfClient(api);
@@ -982,6 +1009,9 @@ describe("createPdfClient — protect", () => {
       async ocr(): Promise<OcrResult> {
         return { text: "" };
       },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
     };
     return createPdfClient(api);
   }
@@ -1073,6 +1103,9 @@ describe("createPdfClient — annotate", () => {
       },
       async ocr(): Promise<OcrResult> {
         return { text: "" };
+      },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
       },
     };
     return createPdfClient(api);
@@ -1180,6 +1213,9 @@ describe("createPdfClient — sign", () => {
       async ocr(): Promise<OcrResult> {
         return { text: "" };
       },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
     };
     return createPdfClient(api);
   }
@@ -1272,6 +1308,9 @@ describe("createPdfClient — detectForm / fillForms", () => {
       fillForms,
       async ocr(): Promise<OcrResult> {
         return { text: "" };
+      },
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
       },
     };
     return createPdfClient(api);
@@ -1392,6 +1431,9 @@ describe("createPdfClient — ocr", () => {
         return new Uint8Array();
       },
       ocr,
+      async redact(): Promise<Uint8Array> {
+        return new Uint8Array();
+      },
     };
     return createPdfClient(api);
   }

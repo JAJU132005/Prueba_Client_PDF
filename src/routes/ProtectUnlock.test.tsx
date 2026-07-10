@@ -87,6 +87,9 @@ function fakeClient(protect: PdfClient["protect"]): PdfClient {
     async ocr() {
       return { text: "" };
     },
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -107,7 +110,7 @@ describe("ProtectUnlock — estructura (R21, R22, R23, R24)", () => {
   it("monta la página en /proteger mostrando su título (R21)", () => {
     renderAt(fakeClient(async () => new Uint8Array([1])));
     expect(
-      screen.getByRole("heading", { name: "Proteger / desbloquear PDF" }),
+      screen.getByRole("heading", { name: "Proteger / desbloquear" }),
     ).toBeInTheDocument();
   });
 
@@ -198,7 +201,7 @@ describe("ProtectUnlock — procesado (R26, R27, R28, R29)", () => {
 
     const bar = await screen.findByRole("progressbar");
     await waitFor(() => {
-      expect(bar).toHaveAttribute("aria-valuenow", "0.5");
+      expect(bar).toHaveAttribute("aria-valuenow", "50");
     });
 
     resolveProtect?.(new Uint8Array([1]));
@@ -214,7 +217,7 @@ describe("ProtectUnlock — procesado (R26, R27, R28, R29)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Proteger" }));
 
-    const download = await screen.findByRole("button", { name: "Descargar" });
+    const download = await screen.findByRole("button", { name: /descargar resultado/i });
     fireEvent.click(download);
     expect(downloadBlob).toHaveBeenCalledTimes(1);
     const [blob, name] = vi.mocked(downloadBlob).mock.calls[0];
@@ -233,7 +236,7 @@ describe("ProtectUnlock — procesado (R26, R27, R28, R29)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Desbloquear" }));
 
-    const download = await screen.findByRole("button", { name: "Descargar" });
+    const download = await screen.findByRole("button", { name: /descargar resultado/i });
     fireEvent.click(download);
     expect(downloadBlob).toHaveBeenCalledTimes(1);
     const [, name] = vi.mocked(downloadBlob).mock.calls[0];
@@ -258,7 +261,7 @@ describe("ProtectUnlock — errores (R30, R30b, R31, R31b)", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent?.toLowerCase()).toContain("contraseña es incorrecta");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -277,7 +280,7 @@ describe("ProtectUnlock — errores (R30, R30b, R31, R31b)", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("no es un PDF válido");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
   });
 });

@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PageRangeSelector } from "@/components/PageRangeSelector";
 import { Dropzone } from "@/components/Dropzone";
-import { ResourceCostNote } from "@/components/ResourceCostNote";
+import { ErrorBubble } from "@/components/ErrorBubble";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ResultPanel } from "@/components/ResultPanel";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -155,22 +158,7 @@ export function SplitPdf({ client, countPages }: SplitPdfProps = {}): JSX.Elemen
 
   return (
     <section className="py-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-text md:text-4xl">
-            Dividir PDF
-          </h1>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            100% local
-          </span>
-        </div>
-        <p className="max-w-2xl text-base text-text-muted">
-          Elige visualmente las páginas a extraer: haz clic en las que quieras o
-          usa los atajos. Tu archivo se procesa en tu navegador y nunca se sube a
-          ningún servidor.
-        </p>
-        <ResourceCostNote toolId="split" />
-      </header>
+      <ToolPageHeader toolId="split" />
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
@@ -178,14 +166,12 @@ export function SplitPdf({ client, countPages }: SplitPdfProps = {}): JSX.Elemen
           onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
-          label="Arrastra tu PDF o haz clic para seleccionar"
+          label="Arrastra tu PDF aquí — ¡prometo no chismosear!"
         />
 
         {selection && pageCount > 0 && (
           <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-text">
-              Páginas a extraer
-            </span>
+            <span className="hand text-lg text-ink">Páginas a extraer</span>
             <PageRangeSelector
               pageCount={pageCount}
               value={selection}
@@ -200,69 +186,36 @@ export function SplitPdf({ client, countPages }: SplitPdfProps = {}): JSX.Elemen
             type="button"
             onClick={() => void handleSplit()}
             disabled={!canSplit}
-            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+            className="btn btn-primary lv-ligera"
           >
-            Dividir
+            Cortar por la línea punteada
           </button>
           {(files.length === 0 || rangeSpec.trim() === "") && (
-            <span className="text-sm text-text-muted">
+            <span className="hand soft text-base">
               Selecciona un PDF e indica las páginas a extraer.
             </span>
           )}
         </div>
 
         {status === "processing" && (
-          <div className="flex flex-col gap-2" aria-live="polite">
-            <div className="flex items-center justify-between text-sm text-text-muted">
-              <span>Procesando localmente…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={progress}
-              className="h-2 w-full overflow-hidden rounded-full bg-border"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
+          <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
+            <p className="hand m-0 text-xl text-ink">Las tijeras siguen la línea punteada… <span className="scrawl soft">✂ ¡RAS!</span></p>
+            <ProgressBar value={progress} />
           </div>
         )}
 
         {status === "done" && resultBlob && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
-            <p className="text-sm font-medium text-text">
-              ¡Listo! Tu PDF con las páginas extraídas está preparado.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transition-none"
-              >
-                Descargar
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-              >
-                Dividir otro
-              </button>
-            </div>
-          </div>
+          <ResultPanel
+            fileName="dividido.pdf"
+            onDownload={handleDownload}
+            onReset={handleReset}
+            costLevel="light"
+            title="¡Listo! Recorte limpio."
+          />
         )}
 
         {status === "error" && errorMessage && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {errorMessage}
-          </div>
+          <ErrorBubble message={errorMessage} />
         )}
       </div>
     </section>

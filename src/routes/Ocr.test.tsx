@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,6 +15,7 @@ import {
 } from "@/lib/ocrMemory";
 import { RESOURCE_COST_LABEL } from "@/lib/resourceCost";
 import { OCR_LANGUAGES, type OcrOptions, type OcrResult } from "@/pdf/ocrPdf";
+import type { PageCounter } from "@/pdf/pageCount";
 import type {
   PageRasterizer,
   PageRasterizerFactory,
@@ -58,6 +65,29 @@ function fakeRasterizerFactory(pageCount: number): PageRasterizerFactory {
       // no-op
     },
   });
+}
+
+/**
+ * Rasterizador cuyo blob de cada página codifica su índice en el primer byte,
+ * para verificar qué páginas (y en qué orden) llegan a `client.ocr`. (#32 R8)
+ */
+function indexedRasterizerFactory(pageCount: number): PageRasterizerFactory {
+  return async (): Promise<PageRasterizer> => ({
+    pageCount() {
+      return pageCount;
+    },
+    async renderPage(index: number) {
+      return new Blob([new Uint8Array([index])], { type: "image/png" });
+    },
+    destroy() {
+      // no-op
+    },
+  });
+}
+
+/** Contador de páginas falso inyectable que resuelve con `pages`. (#32 R5) */
+function fakeCounter(pages: number): PageCounter {
+  return async () => pages;
 }
 
 /** Cliente falso que captura la llamada a ocr y devuelve un resultado fijo. */
@@ -116,6 +146,9 @@ function fakeClient(ocr: PdfClient["ocr"]): PdfClient {
       return new Uint8Array();
     },
     ocr,
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -126,12 +159,14 @@ interface RenderOptions {
   pageCount?: number;
   isMobile?: boolean;
   file?: File;
+  createRasterizer?: PageRasterizerFactory;
 }
 
 function renderOcr(
   client: PdfClient,
   options: RenderOptions = {},
 ): { container: HTMLElement } {
+  const pageCount = options.pageCount ?? 2;
   const { container } = render(
     <MemoryRouter initialEntries={["/reconocer-texto"]}>
       <Routes>
@@ -140,7 +175,10 @@ function renderOcr(
           element={
             <Ocr
               client={client}
-              createRasterizer={fakeRasterizerFactory(options.pageCount ?? 2)}
+              createRasterizer={
+                options.createRasterizer ?? fakeRasterizerFactory(pageCount)
+              }
+              countPages={fakeCounter(pageCount)}
               isMobile={options.isMobile}
             />
           }
@@ -149,6 +187,18 @@ function renderOcr(
     </MemoryRouter>,
   );
   return { container };
+}
+
+/**
+ * Añade un PDF y espera a que el conteo de páginas asíncrono resuelva y el
+ * selector visual quede montado (todas las páginas seleccionadas).
+ */
+async function addPdfAndWaitSelector(
+  container: HTMLElement,
+  file: File,
+): Promise<void> {
+  addPdf(container, file);
+  await screen.findByRole("button", { name: "Página 1" });
 }
 
 describe("Ocr — estructura (R28, R29, R30, R31, R37)", () => {
@@ -169,27 +219,29 @@ describe("Ocr — estructura (R28, R29, R30, R31, R37)", () => {
     expect(PDF_VALIDATION.allowedMimeTypes).toEqual(["application/pdf"]);
   });
 
-  it("el select de idioma tiene una opción por cada OCR_LANGUAGES (R30)", () => {
+  it("el control de idioma tiene un botón por cada OCR_LANGUAGES (R30)", () => {
     renderOcr(fakeClient(async () => ({ text: "" })));
-    const select = screen.getByLabelText(
-      "Idioma del documento",
-    ) as HTMLSelectElement;
-    const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toEqual([...OCR_LANGUAGES]);
+    const group = screen.getByRole("group", { name: "Idioma del documento" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons).toHaveLength(OCR_LANGUAGES.length);
   });
 
   it("el control de salida ofrece text/searchable-pdf/both (R31)", () => {
     renderOcr(fakeClient(async () => ({ text: "" })));
-    const select = screen.getByLabelText(
-      "Formato de salida",
-    ) as HTMLSelectElement;
-    const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toEqual(["text", "searchable-pdf", "both"]);
+    const group = screen.getByRole("group", { name: "Formato de salida" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      "Solo texto (.txt)",
+      "PDF con texto buscable",
+      "Texto y PDF buscable",
+    ]);
   });
 
   it("renderiza la nota de consumo 'Pesada' (R37)", () => {
     renderOcr(fakeClient(async () => ({ text: "" })));
-    expect(screen.getByText(RESOURCE_COST_LABEL.heavy)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/consumo de recursos/i),
+    ).toHaveTextContent(RESOURCE_COST_LABEL.heavy);
   });
 });
 
@@ -204,13 +256,11 @@ describe("Ocr — reconocimiento (R32, R33, R34, R35, R36)", () => {
     });
     const { container } = renderOcr(client, { pageCount: 3 });
 
-    addPdf(container, makePdfFile("a.pdf", [1, 2, 3]));
-    fireEvent.change(screen.getByLabelText("Idioma del documento"), {
-      target: { value: "eng" },
-    });
-    fireEvent.change(screen.getByLabelText("Formato de salida"), {
-      target: { value: "both" },
-    });
+    await addPdfAndWaitSelector(container, makePdfFile("a.pdf", [1, 2, 3]));
+    fireEvent.click(screen.getByRole("button", { name: "Inglés" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Texto y PDF buscable" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Reconocer texto" }));
 
     await waitFor(() => {
@@ -231,12 +281,12 @@ describe("Ocr — reconocimiento (R32, R33, R34, R35, R36)", () => {
     });
     const { container } = renderOcr(client, { pageCount: 1 });
 
-    addPdf(container, makePdfFile("a.pdf", [1]));
+    await addPdfAndWaitSelector(container, makePdfFile("a.pdf", [1]));
     fireEvent.click(screen.getByRole("button", { name: "Reconocer texto" }));
 
     const bar = await screen.findByRole("progressbar");
     await waitFor(() => {
-      expect(bar).toHaveAttribute("aria-valuenow", "0.5");
+      expect(bar).toHaveAttribute("aria-valuenow", "50");
     });
     expect(screen.getByText(/operación pesada/i)).toBeInTheDocument();
 
@@ -250,10 +300,10 @@ describe("Ocr — reconocimiento (R32, R33, R34, R35, R36)", () => {
     }));
     const { container } = renderOcr(client, { pageCount: 1 });
 
-    addPdf(container, makePdfFile("a.pdf", [1]));
-    fireEvent.change(screen.getByLabelText("Formato de salida"), {
-      target: { value: "both" },
-    });
+    await addPdfAndWaitSelector(container, makePdfFile("a.pdf", [1]));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Texto y PDF buscable" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Reconocer texto" }));
 
     const textBtn = await screen.findByRole("button", {
@@ -277,7 +327,7 @@ describe("Ocr — reconocimiento (R32, R33, R34, R35, R36)", () => {
     });
     const { container } = renderOcr(client, { pageCount: 1 });
 
-    addPdf(container, makePdfFile("a.pdf", [1]));
+    await addPdfAndWaitSelector(container, makePdfFile("a.pdf", [1]));
     fireEvent.click(screen.getByRole("button", { name: "Reconocer texto" }));
 
     const alert = await screen.findByRole("alert");
@@ -289,37 +339,144 @@ describe("Ocr — reconocimiento (R32, R33, R34, R35, R36)", () => {
 });
 
 describe("Ocr — aviso de memoria en móvil (R39, R40)", () => {
-  it("móvil + archivo grande → muestra el aviso de memoria (R39)", () => {
+  it("móvil + archivo grande → muestra el aviso de memoria (R39)", async () => {
     const { container } = renderOcr(fakeClient(async () => ({ text: "" })), {
       isMobile: true,
     });
-    addPdf(
+    await addPdfAndWaitSelector(
       container,
       makePdfFile("grande.pdf", [1], OCR_LARGE_FILE_BYTES),
     );
     expect(screen.getByText(OCR_LARGE_FILE_MOBILE_WARNING)).toBeInTheDocument();
   });
 
-  it("móvil + archivo pequeño → no muestra el aviso (R40)", () => {
+  it("móvil + archivo pequeño → no muestra el aviso (R40)", async () => {
     const { container } = renderOcr(fakeClient(async () => ({ text: "" })), {
       isMobile: true,
     });
-    addPdf(container, makePdfFile("pequeno.pdf", [1], 1024));
+    await addPdfAndWaitSelector(container, makePdfFile("pequeno.pdf", [1], 1024));
     expect(
       screen.queryByText(OCR_LARGE_FILE_MOBILE_WARNING),
     ).not.toBeInTheDocument();
   });
 
-  it("no móvil + archivo grande → no muestra el aviso (R40)", () => {
+  it("no móvil + archivo grande → no muestra el aviso (R40)", async () => {
     const { container } = renderOcr(fakeClient(async () => ({ text: "" })), {
       isMobile: false,
     });
-    addPdf(
+    await addPdfAndWaitSelector(
       container,
       makePdfFile("grande.pdf", [1], OCR_LARGE_FILE_BYTES),
     );
     expect(
       screen.queryByText(OCR_LARGE_FILE_MOBILE_WARNING),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("Ocr — páginas seleccionadas #32 (R5, R6, R7)", () => {
+  it("cuenta páginas y renderiza el selector con N casillas todas activas (#32 R5, R6, R7)", async () => {
+    const { container } = renderOcr(fakeClient(async () => ({ text: "" })), {
+      pageCount: 4,
+    });
+    await addPdfAndWaitSelector(container, makePdfFile("a.pdf", [1, 2, 3]));
+
+    const pageButtons = screen.getAllByRole("button", {
+      name: /^Página \d+$/,
+    });
+    expect(pageButtons).toHaveLength(4);
+    for (const button of pageButtons) {
+      expect(button).toHaveAttribute("aria-pressed", "true");
+    }
+  });
+});
+
+describe("Ocr — OCR de páginas seleccionadas #32 (R8, R9, R10)", () => {
+  it("solo procesa las páginas seleccionadas, en orden ascendente (#32 R8)", async () => {
+    let capturedPages: readonly OcrImageInput[] | undefined;
+    const client = fakeClient(async (pages) => {
+      capturedPages = pages;
+      return { text: "ok" };
+    });
+    const { container } = renderOcr(client, {
+      pageCount: 3,
+      createRasterizer: indexedRasterizerFactory(3),
+    });
+    await addPdfAndWaitSelector(container, makePdfFile("a.pdf", [1, 2, 3]));
+
+    // Deselecciona la página 2 (índice 1) → quedan {0, 2}.
+    fireEvent.click(screen.getByRole("button", { name: "Página 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reconocer texto" }));
+
+    await waitFor(() => {
+      expect(capturedPages).toBeDefined();
+    });
+    expect(capturedPages).toHaveLength(2);
+    // El primer byte del bitmap codifica el índice de página de origen.
+    expect((capturedPages ?? []).map((p) => p.bytes[0])).toEqual([0, 2]);
+  });
+
+  it("sin tocar la selección procesa todas las páginas (#32 R9)", async () => {
+    let capturedPages: readonly OcrImageInput[] | undefined;
+    const client = fakeClient(async (pages) => {
+      capturedPages = pages;
+      return { text: "ok" };
+    });
+    const { container } = renderOcr(client, {
+      pageCount: 3,
+      createRasterizer: indexedRasterizerFactory(3),
+    });
+    await addPdfAndWaitSelector(container, makePdfFile("a.pdf", [1, 2, 3]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Reconocer texto" }));
+
+    await waitFor(() => {
+      expect(capturedPages).toBeDefined();
+    });
+    expect((capturedPages ?? []).map((p) => p.bytes[0])).toEqual([0, 1, 2]);
+  });
+
+  it("selección vacía → botón deshabilitado y client.ocr no se llama (#32 R10)", async () => {
+    const ocr = vi.fn(async () => ({ text: "ok" }));
+    const { container } = renderOcr(fakeClient(ocr), { pageCount: 2 });
+    await addPdfAndWaitSelector(container, makePdfFile("a.pdf", [1]));
+
+    // Deselecciona ambas páginas → selección vacía.
+    fireEvent.click(screen.getByRole("button", { name: "Página 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Página 2" }));
+
+    const recognize = screen.getByRole("button", { name: "Reconocer texto" });
+    expect(recognize).toBeDisabled();
+    fireEvent.click(recognize);
+    expect(ocr).not.toHaveBeenCalled();
+  });
+});
+
+describe("Ocr — avisos mantenidos #32 (R18, R19, R21)", () => {
+  it("durante el proceso: progressbar con aria-valuenow y aviso de operación pesada (#32 R18, R19)", async () => {
+    let resolveOcr: ((r: OcrResult) => void) | undefined;
+    const client = fakeClient((_pages, _options, onProgress) => {
+      onProgress?.(0.4);
+      return new Promise<OcrResult>((resolve) => {
+        resolveOcr = resolve;
+      });
+    });
+    const { container } = renderOcr(client, { pageCount: 1 });
+    await addPdfAndWaitSelector(container, makePdfFile("a.pdf", [1]));
+    fireEvent.click(screen.getByRole("button", { name: "Reconocer texto" }));
+
+    const bar = await screen.findByRole("progressbar");
+    await waitFor(() => {
+      expect(bar).toHaveAttribute("aria-valuenow", "40");
+    });
+    expect(screen.getByText(/operación pesada/i)).toBeInTheDocument();
+
+    resolveOcr?.({ text: "listo" });
+  });
+
+  it("renderiza el badge 'Pesada' con su frase explicativa (#32 R21)", () => {
+    renderOcr(fakeClient(async () => ({ text: "" })));
+    const note = screen.getByLabelText(/consumo de recursos/i);
+    expect(note).toHaveTextContent(RESOURCE_COST_LABEL.heavy);
   });
 });

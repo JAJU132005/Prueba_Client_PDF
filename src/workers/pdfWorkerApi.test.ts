@@ -17,6 +17,7 @@ import {
   InvalidRotationError,
   OrganizeFailedError,
   ProbeFailedError,
+  RedactFailedError,
   SignFailedError,
 } from "@/pdf/types";
 import { createPdfWorkerApi } from "@/workers/pdfWorkerApi";
@@ -380,5 +381,34 @@ describe("createPdfWorkerApi", () => {
     );
     expect(result.text).toBe("TEXTO DEL MOTOR FALSO");
     expect(result.pdfBytes).toBeUndefined();
+  });
+
+  it("redact delega en redactPdf: página redactada (imagen) + intacta (R3, R6, R9)", async () => {
+    const api = createPdfWorkerApi();
+    const pdf2 = await makePdf(2);
+    const viaApi = await api.redact(pdf2, [
+      { pageIndex: 0, bytes: makePng1x1(), mimeType: "image/png" },
+    ]);
+    const out = await PDFDocument.load(viaApi);
+    // Conserva el conteo de páginas: 1 redactada (imagen) + 1 intacta (copiada).
+    expect(out.getPageCount()).toBe(2);
+  });
+
+  it("redact propaga RedactFailedError ante lista vacía (R12)", async () => {
+    const api = createPdfWorkerApi();
+    const pdf2 = await makePdf(2);
+    await expect(api.redact(pdf2, [])).rejects.toBeInstanceOf(
+      RedactFailedError,
+    );
+  });
+
+  it("redact propaga InvalidPdfError ante bytes no-PDF (R11)", async () => {
+    const api = createPdfWorkerApi();
+    const invalid = new Uint8Array([0x68, 0x69]);
+    await expect(
+      api.redact(invalid, [
+        { pageIndex: 0, bytes: makePng1x1(), mimeType: "image/png" },
+      ]),
+    ).rejects.toBeInstanceOf(InvalidPdfError);
   });
 });

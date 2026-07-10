@@ -13,7 +13,9 @@ OCR funcione **sin CDN** y **offline**. Los paths están configurados en
 - `tesseract-core.wasm` + `tesseract-core.wasm.js` — core WASM de respaldo (para
   navegadores sin SIMD).
 - `lang/<lang>.traineddata` — datos de idioma (uno por cada idioma de
-  `OCR_LANGUAGES`: `spa`, `eng`, `fra`, `deu`, `por`, `ita`).
+  `OCR_LANGUAGES`). Catálogo ampliado #32 (13 idiomas):
+  `spa`, `eng`, `fra`, `deu`, `por`, `ita`, `nld`, `cat`, `glg`, `pol`, `swe`,
+  `tur`, `rus`.
 
 ## Datos de idioma
 
@@ -23,6 +25,21 @@ cero-red/offline se empaquetan localmente en `lang/`. Se recomienda la variante
 **`tessdata_fast`** (~1–2 MB por idioma) descargándolos una sola vez en el
 proceso de build/preparación desde el repositorio oficial de tessdata_fast y
 colocándolos como `lang/spa.traineddata`, `lang/eng.traineddata`, etc.
+
+Ficheros requeridos (uno por idioma del catálogo #32):
+
+```
+lang/spa.traineddata   lang/eng.traineddata   lang/fra.traineddata
+lang/deu.traineddata   lang/por.traineddata   lang/ita.traineddata
+lang/nld.traineddata   lang/cat.traineddata   lang/glg.traineddata
+lang/pol.traineddata   lang/swe.traineddata   lang/tur.traineddata
+lang/rus.traineddata
+```
+
+El motor (`src/lib/tesseractOcrEngine.ts`) NO requiere cambios: ya usa
+`langPath = "/tesseract/lang"` (propio origen) y crea un worker por idioma bajo
+demanda con esa ruta, de modo que cualquier idioma nuevo carga su
+`.traineddata` localmente sin red (invariante cero-red, #32 R4).
 
 > Nota: la descarga de estos assets grandes no se cubre en el suite de tests,
 > igual que el WASM de pdf.js. El invariante duro (los **datos del usuario**

@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PageRangeSelector } from "@/components/PageRangeSelector";
 import { Dropzone } from "@/components/Dropzone";
-import { ResourceCostNote } from "@/components/ResourceCostNote";
+import { ErrorBubble } from "@/components/ErrorBubble";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ResultPanel } from "@/components/ResultPanel";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { LivePreview } from "@/components/LivePreview";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
@@ -327,22 +330,7 @@ export function Watermark({
 
   return (
     <section className="py-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-text md:text-4xl">
-            Marca de agua
-          </h1>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            100% local
-          </span>
-        </div>
-        <p className="max-w-2xl text-base text-text-muted">
-          Estampa un texto o una imagen como marca de agua sobre las páginas que
-          elijas, ajustando la opacidad, el ángulo y la posición. Tu archivo se
-          procesa en tu navegador y nunca se sube a ningún servidor.
-        </p>
-        <ResourceCostNote toolId="watermark" />
-      </header>
+      <ToolPageHeader toolId="watermark" />
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
@@ -350,35 +338,35 @@ export function Watermark({
           onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
-          label="Arrastra tu PDF o haz clic para seleccionar"
+          label="Arrastra tu PDF aquí — ¡prometo no chismosear!"
         />
 
-        <div className="flex flex-col gap-2">
-          <label
-            htmlFor="watermark-mode"
-            className="text-sm font-medium text-text"
-          >
-            Modo de marca
-          </label>
-          <select
-            id="watermark-mode"
-            value={mode}
-            onChange={(event) =>
-              setMode(event.target.value as WatermarkMode)
-            }
-            className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        <div className="optpanel max-w-[640px]">
+          <h3 className="hand mb-2.5 mt-0 text-xl font-normal text-ink">
+            Pestañas del cuaderno
+          </h3>
+          <div
+            role="group"
+            aria-label="Modo de marca"
+            className="flex flex-wrap gap-2"
           >
             {WATERMARK_MODES.map((value) => (
-              <option key={value} value={value}>
+              <button
+                key={value}
+                type="button"
+                onClick={() => setMode(value)}
+                aria-pressed={mode === value}
+                className={`btn ${mode === value ? "!bg-hl-green" : ""}`}
+              >
                 {MODE_LABELS[value]}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
         </div>
 
         {mode === "image" && (
           <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-text">
+            <span className="hand text-lg text-ink">
               Imagen de marca
             </span>
             <Dropzone
@@ -396,7 +384,7 @@ export function Watermark({
             <div className="flex flex-col gap-2">
               <label
                 htmlFor="watermark-text"
-                className="text-sm font-medium text-text"
+                className="hand text-lg text-ink"
               >
                 Texto de la marca
               </label>
@@ -405,14 +393,14 @@ export function Watermark({
                 type="text"
                 value={text}
                 onChange={(event) => setText(event.target.value)}
-                className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="hand w-full max-w-sm border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
               />
             </div>
 
             <div className="flex flex-col gap-2">
               <label
                 htmlFor="watermark-font-size"
-                className="text-sm font-medium text-text"
+                className="hand text-lg text-ink"
               >
                 Tamaño de fuente
               </label>
@@ -422,7 +410,7 @@ export function Watermark({
                 min={1}
                 value={fontSize}
                 onChange={(event) => setFontSize(Number(event.target.value))}
-                className="w-full max-w-[8rem] rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="hand w-full max-w-[8rem] border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
               />
             </div>
           </>
@@ -431,7 +419,7 @@ export function Watermark({
         <div className="flex flex-col gap-2">
           <label
             htmlFor="watermark-position"
-            className="text-sm font-medium text-text"
+            className="hand text-lg text-ink"
           >
             Posición
           </label>
@@ -441,7 +429,7 @@ export function Watermark({
             onChange={(event) =>
               setPosition(event.target.value as WatermarkPosition)
             }
-            className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-full max-w-sm border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
           >
             {WATERMARK_POSITIONS.map((value) => (
               <option key={value} value={value}>
@@ -454,7 +442,7 @@ export function Watermark({
         <div className="flex flex-col gap-2">
           <label
             htmlFor="watermark-opacity"
-            className="text-sm font-medium text-text"
+            className="hand text-lg text-ink"
           >
             Opacidad
           </label>
@@ -466,14 +454,14 @@ export function Watermark({
             step={0.05}
             value={opacity}
             onChange={(event) => setOpacity(Number(event.target.value))}
-            className="w-full max-w-[8rem] rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-full max-w-[8rem] border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
           />
         </div>
 
         <div className="flex flex-col gap-2">
           <label
             htmlFor="watermark-angle"
-            className="text-sm font-medium text-text"
+            className="hand text-lg text-ink"
           >
             Ángulo de rotación
           </label>
@@ -482,13 +470,13 @@ export function Watermark({
             type="number"
             value={angle}
             onChange={(event) => setAngle(Number(event.target.value))}
-            className="w-full max-w-[8rem] rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="hand w-full max-w-[8rem] border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
           />
         </div>
 
         {selection && pageCount > 0 && (
           <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-text">
+            <span className="hand text-lg text-ink">
               Páginas a marcar
             </span>
             <PageRangeSelector
@@ -515,69 +503,36 @@ export function Watermark({
             type="button"
             onClick={() => void handleWatermark()}
             disabled={!canWatermark}
-            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+            className="btn btn-primary lv-ligera"
           >
-            Añadir marca
+            Pasar el rodillo
           </button>
           {files.length === 0 && (
-            <span className="text-sm text-text-muted">
+            <span className="hand soft text-base">
               Selecciona un PDF para marcar.
             </span>
           )}
         </div>
 
         {status === "processing" && (
-          <div className="flex flex-col gap-2" aria-live="polite">
-            <div className="flex items-center justify-between text-sm text-text-muted">
-              <span>Procesando localmente…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={progress}
-              className="h-2 w-full overflow-hidden rounded-full bg-border"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
+          <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
+            <p className="hand m-0 text-xl text-ink">El rodillo fantasma recorre tus páginas… <span className="scrawl soft">~fssshh~</span></p>
+            <ProgressBar value={progress} />
           </div>
         )}
 
         {status === "done" && resultBlob && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
-            <p className="text-sm font-medium text-text">
-              ¡Listo! Tu PDF con la marca de agua está preparado.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transition-none"
-              >
-                Descargar
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-              >
-                Marcar otro
-              </button>
-            </div>
-          </div>
+          <ResultPanel
+            fileName="con-marca.pdf"
+            onDownload={handleDownload}
+            onReset={handleReset}
+            costLevel="light"
+            title="¡Listo! Rodillo pasado."
+          />
         )}
 
         {status === "error" && errorMessage && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {errorMessage}
-          </div>
+          <ErrorBubble message={errorMessage} />
         )}
       </div>
     </section>

@@ -22,6 +22,7 @@ import type {
 import type { PageNumbersOptions } from "@/pdf/pageNumbers";
 import type { ProbeInput, ProbeResult } from "@/pdf/probe";
 import type { ProtectOptions } from "@/pdf/protectPdf";
+import type { RedactedPageImage } from "@/pdf/redact";
 import type { RotateOptions } from "@/pdf/rotateOptions";
 import type { SignOptions } from "@/pdf/signature";
 import type { ProgressCallback } from "@/pdf/types";
@@ -48,6 +49,7 @@ export type {
   ProbeResult,
   ProgressCallback,
   ProtectOptions,
+  RedactedPageImage,
   RotateOptions,
   SignOptions,
   WatermarkOptions,
@@ -205,4 +207,16 @@ export interface PdfWorkerApi {
     options: OcrOptions,
     onProgress?: ProgressCallback,
   ): Promise<OcrResult>;
+  /**
+   * Redacta PERMANENTEMENTE `input`: sustituye cada página de `redactedPages`
+   * (bitmap ya redactado con cajas opacas) por una página-imagen nueva y copia
+   * vectorial las intactas; devuelve los bytes resultantes. El ensamblado pesado
+   * (pdf-lib) corre en el worker; la lógica vive en `redactPdf` (dominio puro).
+   * Aquí solo se declara el contrato. Op nº 16. (R9)
+   */
+  redact(
+    input: Uint8Array,
+    redactedPages: readonly RedactedPageImage[],
+    onProgress?: ProgressCallback,
+  ): Promise<Uint8Array>;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { PandaArt } from "@/components/PandaArt";
 import {
   INSTALL_STEPS_DESKTOP,
   INSTALL_STEPS_MOBILE,
@@ -71,10 +72,10 @@ export function OfflineHelpModal(props: OfflineHelpModalProps): JSX.Element {
         tabIndex={-1}
         onKeyDown={handleKeyDown}
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-full w-full max-w-2xl flex-col gap-4 overflow-auto rounded-2xl bg-surface p-6 shadow-md motion-reduce:transition-none"
+        className="card flex max-h-full w-full max-w-2xl flex-col gap-4 overflow-auto motion-reduce:transition-none"
       >
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-text">
+          <h2 className="hand text-2xl text-ink">
             Instalar y usar sin conexión
           </h2>
           <button
@@ -82,16 +83,28 @@ export function OfflineHelpModal(props: OfflineHelpModalProps): JSX.Element {
             type="button"
             onClick={props.onClose}
             aria-label="Cerrar ayuda"
-            className="rounded-md px-2 py-1 text-text-muted transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+            className="hand px-2 py-1 text-lg text-mk-red"
           >
             ✕
           </button>
         </div>
 
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-hidden="true">
+          <div className="rounded-[10px] border-[2.5px] border-ink-soft p-1">
+            <PandaArt kind="comic1" />
+          </div>
+          <div className="rounded-[10px] border-[2.5px] border-ink-soft p-1">
+            <PandaArt kind="comic2" />
+          </div>
+          <div className="rounded-[10px] border-[2.5px] border-ink-soft p-1">
+            <PandaArt kind="comic3" />
+          </div>
+        </div>
+
         {installSections.map((section) => (
           <section key={section.key} className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-text">{section.title}</h3>
-            <ol className="list-decimal space-y-1 pl-5 text-sm text-text-muted">
+            <h3 className="hand text-lg text-ink">{section.title}</h3>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-soft">
               {section.steps.map((step) => (
                 <li key={step}>{step}</li>
               ))}
@@ -100,17 +113,15 @@ export function OfflineHelpModal(props: OfflineHelpModalProps): JSX.Element {
         ))}
 
         <section className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold text-text">Usar sin conexión</h3>
-          <ol className="list-decimal space-y-1 pl-5 text-sm text-text-muted">
+          <h3 className="hand text-lg text-ink">Usar sin conexión</h3>
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-soft">
             {OFFLINE_USAGE_STEPS.map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ol>
         </section>
 
-        <p className="rounded-xl border border-border bg-bg px-3 py-2 text-sm text-text-muted">
-          {PRIVACY_REMINDER}
-        </p>
+        <p className="postit text-ink">{PRIVACY_REMINDER}</p>
       </div>
     </div>
   );

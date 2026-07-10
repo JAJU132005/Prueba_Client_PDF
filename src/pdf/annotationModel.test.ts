@@ -7,6 +7,7 @@ import {
   createAnnotationState,
   removeAnnotation,
   selectAnnotation,
+  updateAnnotation,
 } from "@/pdf/annotationModel";
 
 const BLACK: AnnotationColor = { r: 0, g: 0, b: 0 };
@@ -126,6 +127,61 @@ describe("annotationModel — reductores (R4, R6, R7, R8, R9, R10, R11, R12)", (
     const selected = selectAnnotation(state, null);
     expect(selected.selectedId).toBeNull();
     expect(selected.annotations).toBe(state.annotations);
+  });
+
+  it("updateAnnotation reemplaza por id, sin mutar y conservando la selección (R19, R35)", () => {
+    let state = createAnnotationState();
+    for (const a of sampleAnnotations(0)) {
+      state = addAnnotation(state, a);
+    }
+    state = selectAnnotation(state, "rect");
+    const before = state;
+
+    const movedRect: Annotation = {
+      id: "rect",
+      pageIndex: 0,
+      kind: "rect",
+      at: { x: 99, y: 99 },
+      width: 20,
+      height: 30,
+      color: BLACK,
+      thickness: 1,
+    };
+    const after = updateAnnotation(state, movedRect);
+
+    // Reemplaza en su posición, conserva orden y longitud.
+    expect(after.annotations).toHaveLength(6);
+    expect(after.annotations.map((a) => a.id)).toEqual(
+      before.annotations.map((a) => a.id),
+    );
+    const replaced = after.annotations.find((a) => a.id === "rect");
+    expect(replaced && replaced.kind === "rect" && replaced.at).toEqual({
+      x: 99,
+      y: 99,
+    });
+    // Conserva la selección.
+    expect(after.selectedId).toBe("rect");
+    // No muta la entrada.
+    const originalRect = before.annotations.find((a) => a.id === "rect");
+    expect(originalRect && originalRect.kind === "rect" && originalRect.at).toEqual(
+      { x: 5, y: 6 },
+    );
+  });
+
+  it("updateAnnotation deja el estado igual si no existe el id (R35)", () => {
+    let state = createAnnotationState();
+    state = addAnnotation(state, sampleAnnotations(0)[0]);
+    const ghost: Annotation = {
+      id: "no-existe",
+      pageIndex: 0,
+      kind: "text",
+      at: { x: 0, y: 0 },
+      text: "x",
+      fontSize: 12,
+      color: BLACK,
+    };
+    const after = updateAnnotation(state, ghost);
+    expect(after.annotations.map((a) => a.id)).toEqual(["text"]);
   });
 
   it("cada anotación creada es un objeto plano serializable (R4)", () => {

@@ -85,6 +85,9 @@ function fakeClient(rotate: PdfClient["rotate"]): PdfClient {
     async ocr() {
       return { text: "" };
     },
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -104,11 +107,11 @@ describe("RotatePdf", () => {
     const client = fakeClient(async () => new Uint8Array([1]));
     const { container } = renderPage(client);
 
-    expect(screen.getByRole("button", { name: "Rotar" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Girar páginas" })).toBeDisabled();
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     await screen.findByRole("button", { name: "Página 1" });
-    expect(screen.getByRole("button", { name: "Rotar" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Girar páginas" })).toBeEnabled();
   });
 
   it("con todas las páginas deseleccionadas 'Rotar' se deshabilita (R37)", async () => {
@@ -118,7 +121,7 @@ describe("RotatePdf", () => {
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     await screen.findByRole("button", { name: "Página 1" });
     fireEvent.click(screen.getByRole("button", { name: "Página 1" }));
-    expect(screen.getByRole("button", { name: "Rotar" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Girar páginas" })).toBeDisabled();
   });
 
   it("al pulsar invoca rotate con los bytes y pages derivado del selector (R38)", async () => {
@@ -135,10 +138,8 @@ describe("RotatePdf", () => {
     await screen.findByRole("button", { name: "Página 1" });
     // Deselecciona la página 3 → pages esperado "1-2".
     fireEvent.click(screen.getByRole("button", { name: "Página 3" }));
-    fireEvent.change(screen.getByLabelText("Ángulo de rotación"), {
-      target: { value: "180" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Rotar" }));
+    fireEvent.click(screen.getByRole("button", { name: "180°" }));
+    fireEvent.click(screen.getByRole("button", { name: "Girar páginas" }));
 
     await waitFor(() => {
       expect(capturedBytes).toBeDefined();
@@ -157,12 +158,46 @@ describe("RotatePdf", () => {
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Rotar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Girar páginas" }));
 
     await waitFor(() => {
       expect(capturedOptions).toBeDefined();
     });
     expect(capturedOptions).toEqual({ angle: 90, pages: "all" });
+  });
+
+  // Test de integración de plantilla 02 (#28 R33, R41): la acción principal
+  // re-pielada (botones-óvalo de ángulo con aria-pressed) invoca la MISMA
+  // operación `rotate` del cliente del worker con el ángulo y las páginas
+  // elegidos, y ofrece la descarga del resultado.
+  it("plantilla 02: la acción re-pielada invoca rotate con ángulo/páginas y ofrece la descarga (#28 R33, R41)", async () => {
+    let capturedOptions: RotateOptions | undefined;
+    const client = fakeClient(async (_input, options) => {
+      capturedOptions = options;
+      return new Uint8Array([9]);
+    });
+    const { container } = renderPage(client, fakeCounter(3));
+
+    addFiles(container, [makePdfFile("a.pdf", [1, 2, 3])]);
+    await screen.findByRole("button", { name: "Página 1" });
+
+    const angle270 = screen.getByRole("button", { name: "270°" });
+    expect(angle270).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(angle270);
+    expect(
+      screen.getByRole("button", { name: "270°" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Página 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Girar páginas" }));
+
+    await waitFor(() => {
+      expect(capturedOptions).toBeDefined();
+    });
+    expect(capturedOptions).toEqual({ angle: 270, pages: "1,3" });
+    expect(
+      await screen.findByRole("button", { name: /descargar resultado/i }),
+    ).toBeInTheDocument();
   });
 
   it("muestra la barra de progreso mientras rota (R39)", async () => {
@@ -177,11 +212,11 @@ describe("RotatePdf", () => {
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Rotar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Girar páginas" }));
 
     const bar = await screen.findByRole("progressbar");
     await waitFor(() => {
-      expect(bar).toHaveAttribute("aria-valuenow", "0.5");
+      expect(bar).toHaveAttribute("aria-valuenow", "50");
     });
 
     resolveRotate?.(new Uint8Array([9]));
@@ -193,10 +228,10 @@ describe("RotatePdf", () => {
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Rotar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Girar páginas" }));
 
     expect(
-      await screen.findByRole("button", { name: "Descargar" }),
+      await screen.findByRole("button", { name: /descargar resultado/i }),
     ).toBeInTheDocument();
   });
 
@@ -208,12 +243,12 @@ describe("RotatePdf", () => {
 
     addFiles(container, [makePdfFile("a.pdf", [1])]);
     await screen.findByRole("button", { name: "Página 1" });
-    fireEvent.click(screen.getByRole("button", { name: "Rotar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Girar páginas" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("El ángulo de rotación no es válido.");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
   });
 });

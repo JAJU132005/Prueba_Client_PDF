@@ -1,0 +1,18 @@
+Fuentes empaquetadas localmente (subset latino, formato WOFF2):
+
+- Patrick Hand — Copyright (c) 2010-2012 Patrick Wagesreiter
+  (mail@patrickwagesreiter.at)
+- Gochi Hand — Copyright (c) 2010, Juan Pablo del Peral
+  (juan@huertatipografica.com.ar), with Reserved Font Name "Gochi Hand"
+- Nunito — Copyright 2014 The Nunito Project Authors
+  (https://github.com/googlefonts/nunito)
+
+Las tres familias se distribuyen bajo la SIL Open Font License, Version 1.1.
+Texto completo de la licencia: https://openfontlicense.org
+(SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The fonts are provided "as is", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose and noninfringement of copyright, patent,
+trademark, or other right.

@@ -84,6 +84,9 @@ function fakeClient(imagesToPdf: PdfClient["imagesToPdf"]): PdfClient {
     async ocr() {
       return { text: "" };
     },
+    async redact() {
+      return new Uint8Array();
+    },
     dispose() {
       // no-op
     },
@@ -168,7 +171,7 @@ describe("ImagesToPdf — conversión (R45, R46, R47, R48, R49)", () => {
     fireEvent.change(screen.getByLabelText("Tamaño de página"), {
       target: { value: "a4" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Convertir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar el álbum con moño" }));
 
     await waitFor(() => {
       expect(capturedImages?.length).toBe(2);
@@ -188,11 +191,11 @@ describe("ImagesToPdf — conversión (R45, R46, R47, R48, R49)", () => {
     const { container } = renderAt(client);
 
     addFiles(container, [makeImageFile("a.jpg", [1], "image/jpeg")]);
-    fireEvent.click(screen.getByRole("button", { name: "Convertir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar el álbum con moño" }));
 
     const bar = await screen.findByRole("progressbar");
     await waitFor(() => {
-      expect(bar).toHaveAttribute("aria-valuenow", "0.5");
+      expect(bar).toHaveAttribute("aria-valuenow", "50");
     });
 
     resolveConvert?.(new Uint8Array([9]));
@@ -203,9 +206,9 @@ describe("ImagesToPdf — conversión (R45, R46, R47, R48, R49)", () => {
     const { container } = renderAt(client);
 
     addFiles(container, [makeImageFile("a.jpg", [1], "image/jpeg")]);
-    fireEvent.click(screen.getByRole("button", { name: "Convertir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar el álbum con moño" }));
 
-    const download = await screen.findByRole("button", { name: "Descargar" });
+    const download = await screen.findByRole("button", { name: /descargar resultado/i });
     fireEvent.click(download);
 
     expect(downloadBlob).toHaveBeenCalledTimes(1);
@@ -221,12 +224,12 @@ describe("ImagesToPdf — conversión (R45, R46, R47, R48, R49)", () => {
     const { container } = renderAt(client);
 
     addFiles(container, [makeImageFile("a.jpg", [1], "image/jpeg")]);
-    fireEvent.click(screen.getByRole("button", { name: "Convertir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar el álbum con moño" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("no es un JPG o PNG válido");
     expect(
-      screen.queryByRole("button", { name: "Descargar" }),
+      screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
   });
 });

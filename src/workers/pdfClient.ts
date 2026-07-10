@@ -10,6 +10,7 @@ import type { ImagesToPdfOptions } from "@/pdf/imagesToPdf";
 import type { OcrImageInput, OcrOptions, OcrResult } from "@/pdf/ocrPdf";
 import type { PageNumbersOptions } from "@/pdf/pageNumbers";
 import type { ProtectOptions } from "@/pdf/protectPdf";
+import type { RedactedPageImage } from "@/pdf/redact";
 import type { RotateOptions } from "@/pdf/rotateOptions";
 import type { SignOptions } from "@/pdf/signature";
 import type { ProgressCallback } from "@/pdf/types";
@@ -152,6 +153,16 @@ export interface PdfClient {
     options: OcrOptions,
     onProgress?: ProgressCallback,
   ): Promise<OcrResult>;
+  /**
+   * Redacta PERMANENTEMENTE `input` sustituyendo las páginas de `redactedPages`
+   * por sus bitmaps redactados y devuelve los bytes. La lógica corre en el
+   * worker; aquí solo se transporta la llamada. (R9, R10)
+   */
+  redact(
+    input: Uint8Array,
+    redactedPages: readonly RedactedPageImage[],
+    onProgress?: ProgressCallback,
+  ): Promise<Uint8Array>;
   /** Libera el worker subyacente (no-op si la API fue inyectada). */
   dispose(): void;
 }
@@ -183,6 +194,7 @@ const PDF_WORKER_ERROR_NAMES = new Set<string>([
   "SignFailedError",
   "FillFormFailedError",
   "OcrFailedError",
+  "RedactFailedError",
 ]);
 
 /**
@@ -317,6 +329,14 @@ export function createPdfClient(injectedApi?: PdfWorkerApi): PdfClient {
         try {
           // Rama inyectada (tests): el callback se pasa directo, sin Comlink.
           return await injectedApi.ocr(pages, options, onProgress);
+        } catch (error) {
+          throw error;
+        }
+      },
+      async redact(input, redactedPages, onProgress) {
+        try {
+          // Rama inyectada (tests): el callback se pasa directo, sin Comlink.
+          return await injectedApi.redact(input, redactedPages, onProgress);
         } catch (error) {
           throw error;
         }
@@ -517,6 +537,19 @@ export function createPdfClient(injectedApi?: PdfWorkerApi): PdfClient {
         return await remote.ocr(
           pages,
           options,
+          onProgress ? Comlink.proxy(onProgress) : undefined,
+        );
+      } catch (error) {
+        throw error;
+      }
+    },
+    async redact(input, redactedPages, onProgress) {
+      try {
+        // El ensamblado pesado (pdf-lib) corre en el worker; el callback de
+        // progreso cruza el límite vía Comlink.proxy. (R9)
+        return await remote.redact(
+          input,
+          redactedPages,
           onProgress ? Comlink.proxy(onProgress) : undefined,
         );
       } catch (error) {

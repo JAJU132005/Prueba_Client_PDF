@@ -1,7 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Dropzone } from "@/components/Dropzone";
-import { ResourceCostNote } from "@/components/ResourceCostNote";
+import { ErrorBubble } from "@/components/ErrorBubble";
+import { PageRangeSelector } from "@/components/PageRangeSelector";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
 import {
   DEFAULT_MAX_FILE_BYTES,
@@ -11,6 +14,7 @@ import {
   OCR_LARGE_FILE_MOBILE_WARNING,
   shouldWarnLargeFileOnMobile,
 } from "@/lib/ocrMemory";
+import { pdfjsPageCount } from "@/lib/pdfjsPageCounter";
 import { createPdfjsPageRasterizer } from "@/lib/pdfjsPageRasterizer";
 import { useIsMobile } from "@/lib/useIsMobile";
 import {
@@ -19,6 +23,13 @@ import {
   type OcrLanguage,
   type OcrOutput,
 } from "@/pdf/ocrPdf";
+import { countPdfPages, type PageCounter } from "@/pdf/pageCount";
+import {
+  createSelection,
+  resolvePages,
+  toPageSelection,
+  type PageSelectionState,
+} from "@/pdf/pageSelection";
 import {
   rasterizePages,
   type PageRasterizerFactory,
@@ -77,6 +88,11 @@ export interface OcrProps {
   client?: PdfClient;
   /** Inyección para tests deterministas del aviso de memoria (A4). */
   isMobile?: boolean;
+  /**
+   * Contador de páginas inyectable (tests). Por defecto `pdfjsPageCount`.
+   * (#32 R5)
+   */
+  countPages?: PageCounter;
 }
 
 export function Ocr(props?: OcrProps): JSX.Element {
@@ -86,10 +102,13 @@ export function Ocr(props?: OcrProps): JSX.Element {
     () => props?.client ?? createPdfClient(),
     [props?.client],
   );
+  const counter = props?.countPages ?? pdfjsPageCount;
   const detectedMobile = useIsMobile();
   const isMobile = props?.isMobile ?? detectedMobile;
 
   const [files, setFiles] = useState<File[]>([]);
+  const [pageCount, setPageCount] = useState(0);
+  const [selection, setSelection] = useState<PageSelectionState | null>(null);
   const [language, setLanguage] = useState<OcrLanguage>("spa");
   const [output, setOutput] = useState<OcrOutput>("text");
   const [status, setStatus] = useState<Status>("idle");
@@ -97,20 +116,57 @@ export function Ocr(props?: OcrProps): JSX.Element {
   const [result, setResult] = useState<OcrResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const fileBytes = files.length > 0 ? files[0].size : 0;
   const showMemoryWarning = shouldWarnLargeFileOnMobile(isMobile, fileBytes);
-  const canRecognize = files.length > 0 && status !== "processing";
+  const selectedCount = selection?.selected.size ?? 0;
+  const canRecognize =
+    files.length > 0 && status !== "processing" && selectedCount > 0;
+
+  async function loadPageCount(file: File): Promise<void> {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const buffer = await file.arrayBuffer();
+    const countResult = await countPdfPages(
+      new Uint8Array(buffer),
+      counter,
+      controller.signal,
+    );
+    if (controller.signal.aborted) return;
+    if (countResult.status === "counted") {
+      // Todas las páginas seleccionadas por defecto. (#32 R5, R6)
+      setPageCount(countResult.pages);
+      setSelection(createSelection(countResult.pages));
+    } else {
+      setPageCount(0);
+      setSelection(null);
+    }
+  }
 
   function handleFilesChange(next: File[]): void {
+    abortRef.current?.abort();
     setFiles(next);
+    setPageCount(0);
+    setSelection(null);
     setStatus("idle");
     setProgress(0);
     setResult(null);
     setErrorMessage(null);
+    if (next.length > 0) {
+      void loadPageCount(next[0]);
+    }
   }
 
   async function handleRecognize(): Promise<void> {
-    if (files.length === 0) {
+    if (files.length === 0 || !selection || selectedCount === 0) {
       return;
     }
     setStatus("processing");
@@ -125,12 +181,19 @@ export function Ocr(props?: OcrProps): JSX.Element {
       // Rasteriza cada página con el rasterizador reutilizado (#9). (R32)
       rasterizer = await createRasterizer(input);
       const controller = new AbortController();
+      // Índices seleccionados (orden ascendente); se filtran en la capa UI sin
+      // tocar `rasterize.ts`, igual que #19. (#32 R8, R9)
+      const selectedIndices = new Set(
+        resolvePages(toPageSelection(selection), pageCount),
+      );
       const collected: RasterizedPage[] = [];
       await rasterizePages(
         rasterizer,
         { format: "png", scale: OCR_RENDER_SCALE },
         (page) => {
-          collected.push(page);
+          if (selectedIndices.has(page.index)) {
+            collected.push(page);
+          }
         },
         controller.signal,
       );
@@ -171,24 +234,7 @@ export function Ocr(props?: OcrProps): JSX.Element {
 
   return (
     <section className="py-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-text md:text-4xl">
-            Reconocer texto (OCR)
-          </h1>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            100% local
-          </span>
-        </div>
-        <p className="max-w-2xl text-base text-text-muted">
-          Extrae el texto de un PDF escaneado con reconocimiento óptico de
-          caracteres. Obtienes siempre el texto en un archivo `.txt` y, si lo
-          eliges, un PDF con una capa de texto invisible buscable. Todo el
-          proceso ocurre en tu navegador; tu archivo nunca se sube a ningún
-          servidor.
-        </p>
-        <ResourceCostNote toolId="ocr" isMobile={props?.isMobile} />
-      </header>
+      <ToolPageHeader toolId="ocr" />
 
       <div className="mt-8 flex flex-col gap-6">
         <Dropzone
@@ -196,54 +242,73 @@ export function Ocr(props?: OcrProps): JSX.Element {
           onFilesChange={handleFilesChange}
           validation={PDF_VALIDATION}
           multiple={false}
-          label="Arrastra tu PDF escaneado o haz clic para seleccionar"
+          label="Arrastra tu PDF escaneado aquí — ¡prometo no chismosear!"
         />
 
         {showMemoryWarning && (
-          <p
-            role="note"
-            className="rounded-xl border border-danger/40 bg-danger/5 p-3 text-sm text-danger"
-          >
+          <p role="note" className="postit max-w-md text-ink">
             {OCR_LARGE_FILE_MOBILE_WARNING}
           </p>
         )}
 
-        <div className="flex flex-col gap-2">
-          <label htmlFor="ocr-language" className="text-sm font-medium text-text">
+        {selection && pageCount > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="hand text-lg text-ink">
+              Páginas a reconocer
+            </span>
+            <PageRangeSelector
+              pageCount={pageCount}
+              value={selection}
+              onChange={setSelection}
+              showAdvanced
+            />
+          </div>
+        )}
+
+        <div className="optpanel max-w-[640px]">
+          <h3 className="hand mb-2.5 mt-0 text-xl font-normal text-ink">
             Idioma del documento
-          </label>
-          <select
-            id="ocr-language"
-            value={language}
-            onChange={(event) =>
-              setLanguage(event.target.value as OcrLanguage)
-            }
-            className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          </h3>
+          <div
+            role="group"
+            aria-label="Idioma del documento"
+            className="flex flex-wrap gap-2"
           >
             {OCR_LANGUAGES.map((value) => (
-              <option key={value} value={value}>
+              <button
+                key={value}
+                type="button"
+                onClick={() => setLanguage(value)}
+                aria-pressed={language === value}
+                className={`btn ${language === value ? "!bg-hl-red" : ""}`}
+              >
                 {ocrLanguageLabel(value)}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <label htmlFor="ocr-output" className="text-sm font-medium text-text">
+        <div className="optpanel max-w-[640px]">
+          <h3 className="hand mb-2.5 mt-0 text-xl font-normal text-ink">
             Formato de salida
-          </label>
-          <select
-            id="ocr-output"
-            value={output}
-            onChange={(event) => setOutput(event.target.value as OcrOutput)}
-            className="w-full max-w-sm rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          </h3>
+          <div
+            role="group"
+            aria-label="Formato de salida"
+            className="flex flex-wrap gap-2"
           >
             {OUTPUT_OPTIONS.map((value) => (
-              <option key={value} value={value}>
+              <button
+                key={value}
+                type="button"
+                onClick={() => setOutput(value)}
+                aria-pressed={output === value}
+                className={`btn ${output === value ? "!bg-hl-red" : ""}`}
+              >
                 {OUTPUT_LABELS[value]}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -251,52 +316,47 @@ export function Ocr(props?: OcrProps): JSX.Element {
             type="button"
             onClick={() => void handleRecognize()}
             disabled={!canRecognize}
-            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none"
+            className="btn btn-primary lv-pesada"
           >
             Reconocer texto
           </button>
           {files.length === 0 && (
-            <span className="text-sm text-text-muted">
+            <span className="hand soft text-base">
               Selecciona un PDF para reconocer su texto.
+            </span>
+          )}
+          {files.length > 0 && selectedCount === 0 && (
+            <span className="hand soft text-base">
+              Selecciona al menos una página para reconocer su texto.
             </span>
           )}
         </div>
 
         {status === "processing" && (
-          <div className="flex flex-col gap-2" aria-live="polite">
-            <p className="rounded-xl border border-amber-300/50 bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
+            <p className="postit max-w-md text-ink">
               El reconocimiento de texto es una operación pesada y puede tardar,
               sobre todo en documentos largos. Mantén esta pestaña abierta.
             </p>
-            <div className="flex items-center justify-between text-sm text-text-muted">
-              <span>Reconociendo localmente…</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={1}
-              aria-valuenow={progress}
-              className="h-2 w-full overflow-hidden rounded-full bg-border"
-            >
-              <div
-                className="h-full bg-primary transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
+            <p className="hand m-0 text-xl text-ink">
+              La lupa del panda detective recorre tus páginas…{" "}
+              <span className="scrawl soft">¡AJÁ!</span>
+            </p>
+            <ProgressBar value={progress} />
           </div>
         )}
 
         {status === "done" && result && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6">
-            <p className="text-sm text-text-muted">
-              Reconocimiento completado. Descarga el resultado.
-            </p>
+          <div className="card flex max-w-[640px] flex-col gap-4">
+            <h3 className="hand m-0 text-2xl font-normal text-ink">
+              <span className="hl-pesada">Reconocimiento completado.</span>{" "}
+              Descarga el resultado.
+            </h3>
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={handleDownloadText}
-                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transition-none"
+                className="btn btn-primary lv-pesada !px-6 !py-2 !text-xl"
               >
                 Descargar texto
               </button>
@@ -304,7 +364,7 @@ export function Ocr(props?: OcrProps): JSX.Element {
                 <button
                   type="button"
                   onClick={handleDownloadPdf}
-                  className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+                  className="btn"
                 >
                   Descargar PDF buscable
                 </button>
@@ -314,12 +374,7 @@ export function Ocr(props?: OcrProps): JSX.Element {
         )}
 
         {status === "error" && errorMessage && (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger/40 bg-danger/5 p-4 text-sm text-danger"
-          >
-            {errorMessage}
-          </div>
+          <ErrorBubble message={errorMessage} />
         )}
       </div>
     </section>

@@ -25,27 +25,28 @@ export function OfflineEducationBanner(): JSX.Element | null {
       <div
         role="region"
         aria-label="Aviso de uso sin conexión"
-        className="border-b border-border bg-surface"
+        className="card mx-auto mt-4 flex w-fit max-w-[820px] -rotate-[0.6deg] flex-wrap items-center gap-3 !rounded-[20px_8px_18px_10px/10px_18px_8px_20px] !px-5 !py-2.5"
       >
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2 md:px-6">
-          <p className="text-sm text-text-muted">{BANNER_MESSAGE}</p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setHelpOpen(true)}
-              className="rounded-md px-2 py-1 text-sm font-medium text-primary transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-            >
-              Cómo instalarla
-            </button>
-            <button
-              type="button"
-              onClick={() => setDismissed(true)}
-              aria-label="Descartar aviso"
-              className="rounded-md px-2 py-1 text-text-muted transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
-            >
-              ✕
-            </button>
-          </div>
+        <span className="tape" aria-hidden="true" />
+        <p className="hand text-lg">
+          <span>{BANNER_MESSAGE}</span> <span aria-hidden="true">🐼</span>
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="hand text-[17px] text-ink shadow-[inset_0_-7px_0_var(--hl-orange)]"
+          >
+            Cómo instalarla
+          </button>
+          <button
+            type="button"
+            onClick={() => setDismissed(true)}
+            aria-label="Descartar aviso"
+            className="hand px-2 py-1 text-lg text-mk-red"
+          >
+            ✕
+          </button>
         </div>
       </div>
       {helpOpen && <OfflineHelpModal onClose={() => setHelpOpen(false)} />}
