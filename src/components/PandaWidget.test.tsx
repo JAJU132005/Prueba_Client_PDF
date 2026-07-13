@@ -17,6 +17,15 @@ describe("PandaWidget", () => {
     expect(svg?.style.pointerEvents).toBe("auto");
   });
 
+  it("dibuja el panda con colores tokenizados para la pizarra (#41)", () => {
+    const { container } = render(<PandaWidget />);
+    const markup = container.querySelector("[data-panda-widget]")?.innerHTML ?? "";
+    // Pelaje, parches y brillo del ojo derivan de tokens, no de #2d2a26/#fff/#fffdf6.
+    expect(markup).toContain("var(--panda-patch");
+    expect(markup).toContain("var(--panda-fur");
+    expect(markup).toContain("var(--panda-eye");
+  });
+
   it("es enfocable por teclado con nombre accesible (R13)", () => {
     render(<PandaWidget />);
     const panda = screen.getByRole("button", { name: /panda de guardia/i });

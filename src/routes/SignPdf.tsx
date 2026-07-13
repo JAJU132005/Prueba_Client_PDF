@@ -2,31 +2,39 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Dropzone } from "@/components/Dropzone";
 import { ErrorBubble } from "@/components/ErrorBubble";
-import { ProgressBar } from "@/components/ProgressBar";
-import { ResultPanel } from "@/components/ResultPanel";
-import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { LivePreview } from "@/components/LivePreview";
 import { PageRangeSelector } from "@/components/PageRangeSelector";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ResultPanel } from "@/components/ResultPanel";
 import { SignaturePad } from "@/components/SignaturePad";
+import { SignaturePlacementCanvas } from "@/components/SignaturePlacementCanvas";
+import { ToolPageHeader } from "@/components/ToolPageHeader";
+import { UndoControls } from "@/components/UndoControls";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
+import { useUndoableState } from "@/lib/useUndoableState";
+import { useUndoKeybinding } from "@/lib/useUndoKeybinding";
 import {
   DEFAULT_MAX_FILE_BYTES,
   type FileValidationConfig,
 } from "@/lib/fileValidation";
 import { pdfjsPageCount } from "@/lib/pdfjsPageCounter";
+import type { AnnotationColor } from "@/pdf/annotate";
 import { countPdfPages, type PageCounter } from "@/pdf/pageCount";
 import type { PageSelectionState } from "@/pdf/pageSelection";
-import type { PreviewOverlay, PreviewPageSize } from "@/pdf/previewModel";
+import type { PreviewOverlay } from "@/pdf/previewModel";
 import type { PageRasterizerFactory } from "@/pdf/rasterize";
 import {
-  computeSignaturePlacement,
-  type SignOptions,
+  addPlacedSignature,
+  buildPlacedSignatureAnnotations,
+  computeSignatureBox,
+  formatSignatureDate,
+  removePlacedSignature,
+  updatePlacedSignatureBox,
+  updatePlacedSignaturePages,
+  type FreePlacement,
+  type PlacedSignature,
+  type SignatureExtra,
 } from "@/pdf/signature";
-import {
-  WATERMARK_MARGIN,
-  WATERMARK_POSITIONS,
-  type WatermarkPosition,
-} from "@/pdf/watermark";
 import {
   createPdfClient,
   isPdfWorkerError,
@@ -43,34 +51,29 @@ export const PDF_VALIDATION: FileValidationConfig = {
   maxBytes: DEFAULT_MAX_FILE_BYTES,
 };
 
-/** Validación del Dropzone de la imagen de firma: JPG/PNG. (R15) */
+/** Validación del Dropzone de la imagen de firma: JPG/PNG. (R13) */
 export const IMAGE_VALIDATION: FileValidationConfig = {
   allowedExtensions: [".jpg", ".jpeg", ".png"],
   allowedMimeTypes: ["image/jpeg", "image/png"],
   maxBytes: DEFAULT_MAX_FILE_BYTES,
 };
 
-/** Aviso visible: firma VISUAL, no una firma digital certificada. (R17) */
+/** Aviso visible: firma VISUAL, no una firma digital certificada. (R21) */
 export const SIGNATURE_NOTICE =
   "Firma visual: se coloca tu firma como una imagen sobre el PDF; no es una firma digital certificada.";
 
-/** Ancho objetivo por defecto de la firma, en puntos PDF. */
+/** Ancho objetivo por defecto de una firma recién colocada, en puntos PDF. */
 const DEFAULT_WIDTH_PTS = 150;
+/** Ancla inferior-izquierda por defecto de una firma recién colocada. */
+const DEFAULT_AT = { x: 40, y: 40 };
+/** Relación de aspecto por defecto si no se puede medir la imagen. */
+const DEFAULT_ASPECT_RATIO = 2;
+/** Color por defecto de los extras (negro). */
+const EXTRA_COLOR: AnnotationColor = { r: 0, g: 0, b: 0 };
+/** Tamaño de fuente por defecto de los extras (pts PDF). */
+const EXTRA_FONT_SIZE = 14;
 
-/** Etiqueta legible de cada posición. */
-const POSITION_LABELS: Record<WatermarkPosition, string> = {
-  "top-left": "Arriba izquierda",
-  "top-center": "Arriba centro",
-  "top-right": "Arriba derecha",
-  "middle-left": "Medio izquierda",
-  center: "Centro",
-  "middle-right": "Medio derecha",
-  "bottom-left": "Abajo izquierda",
-  "bottom-center": "Abajo centro",
-  "bottom-right": "Abajo derecha",
-};
-
-/** Mapea el `name` estable del error de dominio a un mensaje legible. (R23) */
+/** Mapea el `name` estable del error de dominio a un mensaje legible. (R25) */
 function messageForError(error: unknown): string {
   if (isPdfWorkerError(error)) {
     switch (error.name) {
@@ -78,7 +81,7 @@ function messageForError(error: unknown): string {
         return "El archivo no es un PDF válido.";
       case "InvalidImageError":
         return "La firma no es un JPG o PNG válido.";
-      case "SignFailedError":
+      case "AnnotateFailedError":
         return "No se pudo firmar el PDF.";
       default:
         break;
@@ -92,15 +95,18 @@ export interface SignPdfProps {
   client?: PdfClient;
   /** Contador de páginas inyectable (tests). Por defecto `pdfjsPageCount`. */
   countPages?: PageCounter;
-  /** Factoría de rasterizador para la vista previa (tests). */
+  /** Factoría de rasterizador para la vista previa/lienzo (tests). */
   createRasterizer?: PageRasterizerFactory;
 }
 
 /**
- * Herramienta "Firmar PDF" (#24). Coloca una firma VISUAL (imagen subida o
- * dibujada) en la página y posición elegidas mediante `pdfClient.sign` (pdf-lib
- * en el worker). Aclara que la firma es visual, no certificada (R17). Cero red:
- * la descarga usa un Blob local. La UI no contiene lógica de PDF.
+ * Herramienta unificada "Firmar PDF" (#36). Fusiona la firma con rejilla (#24) y
+ * la colocación libre (#30) en UNA sola: crea una firma activa (subida o
+ * dibujada), la coloca como VARIAS firmas independientes (`PlacedSignature[]`),
+ * cada una movible/redimensionable con aspecto preservado y aplicable a varias
+ * páginas, y las aplana TODAS en UNA exportación mediante `pdfClient.annotate`
+ * (`flattenAnnotations` en el worker). La firma es VISUAL, no certificada (R21).
+ * Cero red: la descarga usa un Blob local. La UI no contiene lógica de PDF.
  */
 export function SignPdf({
   client,
@@ -115,20 +121,30 @@ export function SignPdf({
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [source, setSource] = useState<SignatureSource>("upload");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [signatureBytes, setSignatureBytes] = useState<Uint8Array | null>(null);
-  const [signatureSize, setSignatureSize] = useState<PreviewPageSize | null>(
+  const [activeSignature, setActiveSignature] = useState<Uint8Array | null>(
     null,
   );
-  const [position, setPosition] = useState<WatermarkPosition>("bottom-right");
-  const [widthPts, setWidthPts] = useState(DEFAULT_WIDTH_PTS);
-  const [previewPageSize, setPreviewPageSize] =
-    useState<PreviewPageSize | null>(null);
+  const [activeAspectRatio, setActiveAspectRatio] =
+    useState<number>(DEFAULT_ASPECT_RATIO);
+  // Lista de firmas colocadas versionada con historial de deshacer (#37 R29). La
+  // selección NO se versiona (estado propio). Los `signatureUrls` se derivan del
+  // modelo por `useEffect` (R35), nunca se guardan en el historial.
+  const history = useUndoableState<readonly PlacedSignature[]>([]);
+  const signatures = history.present;
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [signatureUrls, setSignatureUrls] = useState<Record<string, string>>(
+    {},
+  );
+  const [extraText, setExtraText] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  const sigIdRef = useRef(0);
+  const extraIdRef = useRef(0);
+  const urlMapRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     return () => {
@@ -136,20 +152,27 @@ export function SignPdf({
     };
   }, []);
 
-  // Bytes de la firma subida cuando el modo es "upload".
+  // Atajo Ctrl+Z / Ctrl+Shift+Z; se ignora con foco en los inputs de la firma. (#37 R31)
+  useUndoKeybinding({
+    onUndo: history.undo,
+    onRedo: history.redo,
+    enabled: files.length > 0,
+  });
+
+  // Bytes de la firma activa subida cuando el modo es "upload". (R13)
   useEffect(() => {
     if (source !== "upload") {
       return;
     }
     if (imageFiles.length === 0) {
-      setSignatureBytes(null);
+      setActiveSignature(null);
       return;
     }
     let cancelled = false;
     void (async (): Promise<void> => {
       const bytes = new Uint8Array(await imageFiles[0].arrayBuffer());
       if (!cancelled) {
-        setSignatureBytes(bytes);
+        setActiveSignature(bytes);
       }
     })();
     return () => {
@@ -157,61 +180,109 @@ export function SignPdf({
     };
   }, [source, imageFiles]);
 
-  // Tamaño intrínseco de la firma (para aproximar el overlay de la vista previa).
+  // Mide el aspecto intrínseco de la firma activa (sin red: object URL local).
   useEffect(() => {
-    if (!signatureBytes) {
-      setSignatureSize(null);
+    if (!activeSignature) {
+      setActiveAspectRatio(DEFAULT_ASPECT_RATIO);
       return;
     }
-    const url = URL.createObjectURL(new Blob([new Uint8Array(signatureBytes)]));
+    const url = URL.createObjectURL(
+      new Blob([new Uint8Array(activeSignature)], { type: "image/png" }),
+    );
     const img = new Image();
     img.onload = (): void => {
-      setSignatureSize({
-        width: img.naturalWidth,
-        height: img.naturalHeight,
-      });
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        setActiveAspectRatio(img.naturalWidth / img.naturalHeight);
+      }
+      URL.revokeObjectURL(url);
     };
     img.src = url;
     return () => {
       URL.revokeObjectURL(url);
     };
-  }, [signatureBytes]);
+  }, [activeSignature]);
 
-  // Selección visual single-active: solo la página activa aparece marcada. (R18)
-  const selection: PageSelectionState = useMemo(
-    () => ({ pageCount, selected: new Set([activePageIndex]) }),
-    [pageCount, activePageIndex],
+  // Object URLs (locales) por firma colocada, para dibujarlas en el lienzo.
+  // Se crean solo para ids nuevos y se revocan cuando la firma desaparece.
+  useEffect(() => {
+    const map = urlMapRef.current;
+    const currentIds = new Set(signatures.map((s) => s.id));
+    for (const [id, url] of [...map.entries()]) {
+      if (!currentIds.has(id)) {
+        URL.revokeObjectURL(url);
+        map.delete(id);
+      }
+    }
+    for (const sig of signatures) {
+      if (!map.has(sig.id)) {
+        map.set(
+          sig.id,
+          URL.createObjectURL(
+            new Blob([new Uint8Array(sig.image)], { type: "image/png" }),
+          ),
+        );
+      }
+    }
+    setSignatureUrls(Object.fromEntries(map));
+  }, [signatures]);
+
+  useEffect(() => {
+    return () => {
+      for (const url of urlMapRef.current.values()) {
+        URL.revokeObjectURL(url);
+      }
+      urlMapRef.current.clear();
+    };
+  }, []);
+
+  const selectedSig = useMemo(
+    () => signatures.find((s) => s.id === selectedId) ?? null,
+    [signatures, selectedId],
   );
 
-  // Overlay imagen de aproximación derivado de `computeSignaturePlacement`. (R25)
+  // Selección de páginas de la firma seleccionada (para el PageRangeSelector).
+  const pageSelection: PageSelectionState = useMemo(
+    () => ({
+      pageCount,
+      selected: new Set(selectedSig?.pageIndices ?? []),
+    }),
+    [pageCount, selectedSig],
+  );
+
+  // Overlays de aproximación para LivePreview: una imagen por firma de la página
+  // activa + textos de sus extras. (patrón #30)
   const overlays: PreviewOverlay[] = useMemo(() => {
-    if (!previewPageSize || !signatureSize) {
-      return [];
-    }
-    const placement = computeSignaturePlacement(
-      signatureSize.width,
-      signatureSize.height,
-      previewPageSize.width,
-      previewPageSize.height,
-      widthPts,
-      position,
-      WATERMARK_MARGIN,
-    );
-    return [
-      {
-        x: placement.x,
-        y: placement.y,
-        width: placement.width,
-        height: placement.height,
+    const list: PreviewOverlay[] = [];
+    for (const sig of signatures) {
+      if (!sig.pageIndices.includes(activePageIndex)) {
+        continue;
+      }
+      list.push({
+        x: sig.box.x,
+        y: sig.box.y,
+        width: sig.box.width,
+        height: sig.box.height,
         opacity: 1,
         rotationDegrees: 0,
         content: { kind: "image" },
-      },
-    ];
-  }, [previewPageSize, signatureSize, widthPts, position]);
+      });
+      for (const extra of sig.extras ?? []) {
+        list.push({
+          x: extra.at.x,
+          y: extra.at.y,
+          width: extra.text.length * extra.fontSize * 0.6,
+          height: extra.fontSize,
+          opacity: 1,
+          rotationDegrees: 0,
+          content: { kind: "text", text: extra.text, fontSize: extra.fontSize },
+        });
+      }
+    }
+    return list;
+  }, [signatures, activePageIndex]);
 
   const canSign =
-    files.length > 0 && signatureBytes !== null && status !== "processing";
+    files.length > 0 && signatures.length > 0 && status !== "processing";
 
   async function loadPageCount(file: File): Promise<void> {
     abortRef.current?.abort();
@@ -229,6 +300,7 @@ export function SignPdf({
       setActivePageIndex(0);
     } else {
       setPageCount(0);
+      setActivePageIndex(0);
     }
   }
 
@@ -237,37 +309,138 @@ export function SignPdf({
     setFiles(next);
     setPageCount(0);
     setActivePageIndex(0);
+    history.reset([]); // (#37 R33)
+    setSelectedId(null);
     setStatus("idle");
     setProgress(0);
     setResultBlob(null);
     setErrorMessage(null);
-    setPreviewPageSize(null);
     if (next.length > 0) {
       void loadPageCount(next[0]);
     }
   }
 
-  // El selector es multi-toggle; aquí como single-active: la página recién
-  // marcada (distinta de la activa) pasa a ser la activa. (R18)
-  function handleSelectionChange(next: PageSelectionState): void {
-    const candidate = [...next.selected].find((i) => i !== activePageIndex);
-    if (candidate !== undefined) {
-      setActivePageIndex(candidate);
-    }
-  }
-
   function handleSourceChange(next: SignatureSource): void {
     setSource(next);
-    setSignatureBytes(null);
+    setActiveSignature(null);
     setImageFiles([]);
   }
 
   function handleDrawnSignature(bytes: Uint8Array): void {
-    setSignatureBytes(bytes); // (R16)
+    setActiveSignature(bytes); // (R14)
+  }
+
+  // Añade una firma a la lista con la imagen activa reutilizada. (R15)
+  function handleAddSignature(): void {
+    if (!activeSignature) {
+      return;
+    }
+    sigIdRef.current += 1;
+    const id = `sig-${String(sigIdRef.current)}`;
+    // `computeSignatureBox` deriva la caja inicial preservando el aspecto: con
+    // (aspectRatio, 1) como (imageWidth, imageHeight) el alto = width/aspect.
+    const box = computeSignatureBox(
+      activeAspectRatio,
+      1,
+      DEFAULT_AT,
+      DEFAULT_WIDTH_PTS,
+    );
+    const sig: PlacedSignature = {
+      id,
+      image: activeSignature,
+      box,
+      aspectRatio: activeAspectRatio,
+      pageIndices: [activePageIndex],
+    };
+    history.set((prev) => addPlacedSignature(prev, sig)); // (#37 R29)
+    setSelectedId(id);
+  }
+
+  function handleSelect(id: string | null): void {
+    setSelectedId(id); // Selección no versionada. (#37 R34)
+  }
+
+  function handlePlacementChange(id: string, box: FreePlacement): void {
+    // Mover/redimensionar es un gesto continuo; se coalesce en UNA entrada al
+    // soltar (beginGesture/endGesture del lienzo). (#37 R32)
+    history.updateGesture((prev) => updatePlacedSignatureBox(prev, id, box)); // (R17, R18)
+  }
+
+  function handlePagesChange(next: PageSelectionState): void {
+    if (!selectedId) {
+      return;
+    }
+    const pageIndices = [...next.selected].sort((a, b) => a - b);
+    history.set((prev) =>
+      updatePlacedSignaturePages(prev, selectedId, pageIndices),
+    ); // (R20, #37 R29)
+  }
+
+  function handleDeleteSelected(): void {
+    if (!selectedId) {
+      return;
+    }
+    history.set((prev) => removePlacedSignature(prev, selectedId)); // (R19, #37 R29)
+    setSelectedId(null);
+  }
+
+  function handleAddDate(): void {
+    if (!selectedId) {
+      return;
+    }
+    extraIdRef.current += 1;
+    const extra: SignatureExtra = {
+      id: `extra-${String(extraIdRef.current)}`,
+      kind: "date",
+      text: formatSignatureDate(new Date()),
+      at: {
+        x: (selectedSig?.box.x ?? DEFAULT_AT.x),
+        y: Math.max((selectedSig?.box.y ?? DEFAULT_AT.y) - EXTRA_FONT_SIZE - 4, 4),
+      },
+      fontSize: EXTRA_FONT_SIZE,
+      color: EXTRA_COLOR,
+    };
+    history.set((prev) =>
+      prev.map((s) =>
+        s.id === selectedId
+          ? { ...s, extras: [...(s.extras ?? []), extra] }
+          : s,
+      ),
+    ); // (#37 R29)
+  }
+
+  function handleAddText(): void {
+    const text = extraText.trim();
+    if (text === "" || !selectedId) {
+      return;
+    }
+    extraIdRef.current += 1;
+    const extra: SignatureExtra = {
+      id: `extra-${String(extraIdRef.current)}`,
+      kind: "text",
+      text,
+      at: {
+        x: (selectedSig?.box.x ?? DEFAULT_AT.x),
+        y: Math.max(
+          (selectedSig?.box.y ?? DEFAULT_AT.y) - 2 * (EXTRA_FONT_SIZE + 4),
+          4,
+        ),
+      },
+      fontSize: EXTRA_FONT_SIZE,
+      color: EXTRA_COLOR,
+    };
+    history.set((prev) =>
+      prev.map((s) =>
+        s.id === selectedId
+          ? { ...s, extras: [...(s.extras ?? []), extra] }
+          : s,
+      ),
+    ); // (#37 R29)
+    setExtraText("");
   }
 
   async function handleSign(): Promise<void> {
-    if (files.length === 0 || signatureBytes === null) {
+    if (files.length === 0 || signatures.length === 0) {
       return;
     }
     setStatus("processing");
@@ -277,21 +450,20 @@ export function SignPdf({
 
     try {
       const buffer = await files[0].arrayBuffer();
-      const options: SignOptions = {
-        pageIndex: activePageIndex,
-        position,
-        widthPts,
-        image: signatureBytes,
-      };
-      const bytes = await pdfClient.sign(
+      const annotations = buildPlacedSignatureAnnotations(
+        signatures,
+        (signatureId, pageIndex, part) =>
+          `${signatureId}-${String(pageIndex)}-${part}`,
+      ); // (R12)
+      const bytes = await pdfClient.annotate(
         new Uint8Array(buffer),
-        options,
+        annotations,
         (p) => setProgress(p),
-      ); // (R20)
+      ); // (R22)
       setResultBlob(pdfBytesToBlob(bytes));
       setStatus("done");
     } catch (error) {
-      // En fallo no se ofrece descarga; solo mensaje legible. (R23)
+      // En fallo no se ofrece descarga; solo mensaje legible. (R25)
       setErrorMessage(messageForError(error));
       setStatus("error");
     }
@@ -299,7 +471,7 @@ export function SignPdf({
 
   function handleDownload(): void {
     if (resultBlob) {
-      downloadBlob(resultBlob, "firmado.pdf"); // (R21)
+      downloadBlob(resultBlob, "firmado.pdf"); // (R23)
     }
   }
 
@@ -310,22 +482,23 @@ export function SignPdf({
     setActivePageIndex(0);
     setSource("upload");
     setImageFiles([]);
-    setSignatureBytes(null);
-    setSignatureSize(null);
-    setPosition("bottom-right");
-    setWidthPts(DEFAULT_WIDTH_PTS);
-    setPreviewPageSize(null);
+    setActiveSignature(null);
+    history.reset([]); // (#37 R33)
+    setSelectedId(null);
+    setExtraText("");
     setStatus("idle");
     setProgress(0);
     setResultBlob(null);
     setErrorMessage(null);
   }
 
+  const pageOptions = Array.from({ length: pageCount }, (_, i) => i);
+
   return (
     <section className="py-8">
       <ToolPageHeader toolId="sign" />
 
-      {/* Aviso de firma visual, no certificada (R17; texto ÍNTEGRO, #28 R37) */}
+      {/* Aviso de firma visual, no certificada (R21) */}
       <div role="note" className="postit mt-4 max-w-xl text-ink">
         {SIGNATURE_NOTICE}
       </div>
@@ -358,9 +531,7 @@ export function SignPdf({
 
         {source === "upload" && (
           <div className="flex flex-col gap-2">
-            <span className="hand text-lg text-ink">
-              Imagen de firma
-            </span>
+            <span className="hand text-lg text-ink">Imagen de firma</span>
             <Dropzone
               files={imageFiles}
               onFilesChange={setImageFiles}
@@ -375,59 +546,162 @@ export function SignPdf({
           <div className="flex flex-col gap-2">
             <span className="hand text-lg text-ink">Dibuja tu firma</span>
             <SignaturePad onCapture={handleDrawnSignature} />
-            {signatureBytes !== null && (
-              <span className="hand soft text-base">
-                Firma dibujada lista.
-              </span>
+            {activeSignature !== null && (
+              <span className="hand soft text-base">Firma dibujada lista.</span>
             )}
           </div>
         )}
 
-        <div className="flex flex-col gap-2">
-          <label htmlFor="signature-position" className="hand text-lg text-ink">
-            Posición
-          </label>
-          <select
-            id="signature-position"
-            value={position}
-            onChange={(event) =>
-              setPosition(event.target.value as WatermarkPosition)
-            }
-            className="hand w-full max-w-sm border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
+        {/* Añadir la firma activa a la lista (reutilizable varias veces) (R15) */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleAddSignature}
+            disabled={activeSignature === null}
+            className="btn !px-4 !py-1 !text-base"
           >
-            {WATERMARK_POSITIONS.map((value) => (
-              <option key={value} value={value}>
-                {POSITION_LABELS[value]}
-              </option>
-            ))}
-          </select>
+            Añadir firma
+          </button>
+          {activeSignature === null && (
+            <span className="hand soft text-base">
+              Sube o dibuja una firma para colocarla.
+            </span>
+          )}
         </div>
 
-        <div className="flex flex-col gap-2">
-          <label htmlFor="signature-width" className="hand text-lg text-ink">
-            Ancho de la firma (puntos)
-          </label>
-          <input
-            id="signature-width"
-            type="number"
-            min={1}
-            value={widthPts}
-            onChange={(event) => setWidthPts(Number(event.target.value))}
-            className="hand w-full max-w-[8rem] border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
-          />
-        </div>
+        {/* Página activa a mostrar en el lienzo/preview */}
+        {files.length > 0 && pageCount > 1 && (
+          <div className="flex flex-col gap-2">
+            <label
+              htmlFor="active-page"
+              className="hand text-lg text-ink"
+            >
+              Página a mostrar
+            </label>
+            <select
+              id="active-page"
+              value={activePageIndex}
+              onChange={(event) =>
+                setActivePageIndex(Number(event.target.value))
+              }
+              className="hand w-full max-w-[8rem] border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1.5 text-lg text-ink outline-none"
+            >
+              {pageOptions.map((i) => (
+                <option key={i} value={i}>
+                  {i + 1}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        {files.length > 0 && pageCount > 0 && (
+        {/* Lista editable de firmas colocadas */}
+        {signatures.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="hand text-lg text-ink">Firmas colocadas</span>
+            <ul className="flex flex-col gap-1 p-0">
+              {signatures.map((sig, index) => (
+                <li
+                  key={sig.id}
+                  data-testid="placed-signature-item"
+                  className="hand flex items-center gap-3 text-base text-ink"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(sig.id)}
+                    aria-pressed={sig.id === selectedId}
+                    aria-label={`Firma ${String(index + 1)}`}
+                    className={
+                      sig.id === selectedId
+                        ? "underline decoration-mk-green"
+                        : undefined
+                    }
+                  >
+                    Firma {index + 1} (páginas:{" "}
+                    {sig.pageIndices.map((p) => p + 1).join(", ")})
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                disabled={selectedId === null}
+                className="btn !px-4 !py-1 !text-base"
+              >
+                Eliminar firma seleccionada
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Páginas donde colocar la firma seleccionada (R20) */}
+        {selectedSig !== null && files.length > 0 && pageCount > 0 && (
           <div className="flex flex-col gap-2">
             <span className="hand text-lg text-ink">
-              Página donde firmar
+              Páginas de la firma seleccionada (elige una o varias)
             </span>
             <PageRangeSelector
               pageCount={pageCount}
-              value={selection}
-              onChange={handleSelectionChange}
+              value={pageSelection}
+              onChange={handlePagesChange}
             />
           </div>
+        )}
+
+        {/* Elementos opcionales de la firma seleccionada */}
+        {selectedSig !== null && (
+          <div className="flex flex-col gap-3">
+            <span className="hand text-lg text-ink">Elementos opcionales</span>
+            <div className="flex flex-wrap items-end gap-2">
+              <button
+                type="button"
+                onClick={handleAddDate}
+                className="btn !px-4 !py-1 !text-base"
+              >
+                Añadir fecha
+              </button>
+              <input
+                type="text"
+                value={extraText}
+                onChange={(event) => setExtraText(event.target.value)}
+                aria-label="Iniciales o nombre"
+                placeholder="Iniciales o nombre"
+                className="hand w-full max-w-xs border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1 text-base text-ink outline-none placeholder:text-ink-soft"
+              />
+              <button
+                type="button"
+                onClick={handleAddText}
+                className="btn !px-4 !py-1 !text-base"
+              >
+                Añadir texto
+              </button>
+            </div>
+          </div>
+        )}
+
+        {files.length > 0 && pageCount > 0 && (
+          <>
+            <UndoControls
+              canUndo={history.canUndo}
+              canRedo={history.canRedo}
+              onUndo={history.undo}
+              onRedo={history.redo}
+            />
+            <SignaturePlacementCanvas
+              file={files[0]}
+              pageIndex={activePageIndex}
+              placements={signatures}
+              selectedId={selectedId}
+              onSelect={handleSelect}
+              onPlacementChange={handlePlacementChange}
+              onGestureStart={history.beginGesture}
+              onGestureEnd={history.endGesture}
+              signatureUrls={signatureUrls}
+              createRasterizer={createRasterizer}
+            />
+          </>
         )}
 
         {files.length > 0 && (
@@ -435,7 +709,6 @@ export function SignPdf({
             file={files[0]}
             pageIndex={activePageIndex}
             overlays={overlays}
-            onPageSize={setPreviewPageSize}
             createRasterizer={createRasterizer}
           />
         )}
@@ -454,16 +727,18 @@ export function SignPdf({
               Selecciona un PDF para firmar.
             </span>
           )}
-          {files.length > 0 && signatureBytes === null && (
+          {files.length > 0 && signatures.length === 0 && (
             <span className="hand soft text-base">
-              Sube o dibuja una firma.
+              Añade al menos una firma al documento.
             </span>
           )}
         </div>
 
         {status === "processing" && (
           <div className="flex max-w-[640px] flex-col gap-2.5" aria-live="polite">
-            <p className="hand m-0 text-xl text-ink">El panda sigue tu trazo con la mirada…</p>
+            <p className="hand m-0 text-xl text-ink">
+              El panda coloca tus firmas con esmero…
+            </p>
             <ProgressBar value={progress} />
           </div>
         )}

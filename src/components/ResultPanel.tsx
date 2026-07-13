@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
+import { DownloadCta } from "@/components/DownloadCta";
 import { PandaArt } from "@/components/PandaArt";
-import { RESOURCE_COST_LV_CLASS } from "@/components/ResourceCostBadge";
 import type { ResourceCost } from "@/lib/resourceCost";
 
 export interface ResultPanelProps {
@@ -43,7 +43,7 @@ export function ResultPanel(props: ResultPanelProps): JSX.Element {
         {props.children}
       </div>
       <div className="flex min-w-[240px] shrink basis-64 flex-col items-start gap-3">
-        <div className="relative aspect-[3/4] w-[170px] rounded border-[2.5px] border-ink bg-white shadow-doodle">
+        <div className="relative aspect-[3/4] w-[170px] rounded border-[2.5px] border-ink bg-surface shadow-doodle">
           <span className="stamp-topsecret absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2">
             TOP SECRET
           </span>
@@ -51,13 +51,10 @@ export function ResultPanel(props: ResultPanelProps): JSX.Element {
             {props.fileName}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={props.onDownload}
-          className={`btn btn-primary ${RESOURCE_COST_LV_CLASS[props.costLevel]} !px-6 !py-2 !text-xl`}
-        >
-          ⇩ Descargar resultado
-        </button>
+        <DownloadCta
+          onDownload={props.onDownload}
+          costLevel={props.costLevel}
+        />
         <button type="button" onClick={props.onReset} className="btn btn-ghost">
           procesar otro
         </button>

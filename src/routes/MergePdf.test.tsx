@@ -68,9 +68,6 @@ function fakeClient(
     async annotate() {
       return new Uint8Array();
     },
-    async sign() {
-      return new Uint8Array();
-    },
     async detectForm() {
       return { hasFields: false, fields: [] };
     },

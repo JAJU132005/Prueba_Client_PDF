@@ -9,8 +9,8 @@ import { useEffect, useRef, useState } from "react";
  * propio panda. Respeta prefers-reduced-motion (R9, R13).
  */
 
-const INK = "#2d2a26";
-const PAPER = "#fffdf6";
+const PATCH = "var(--panda-patch,#2d2a26)";
+const FUR = "var(--panda-fur,#fffdf6)";
 
 const EGGS = [
   "¡Hola! Soy el panda de guardia.",
@@ -187,9 +187,9 @@ export function PandaWidget(): JSX.Element {
           role="status"
           className="absolute bottom-[120px] right-1 w-[200px] border-[2.5px] p-[9px_12px] font-hand text-base leading-tight"
           style={{
-            background: PAPER,
-            color: INK,
-            borderColor: INK,
+            background: FUR,
+            color: PATCH,
+            borderColor: PATCH,
             borderRadius: "18px 22px 20px 24px/24px 18px 26px 18px",
             boxShadow: "3px 4px 0 rgba(0,0,0,.18)",
           }}
@@ -224,24 +224,24 @@ export function PandaWidget(): JSX.Element {
         <line x1="113" y1="86" x2="120" y2="86" stroke="#4c7a2c" strokeWidth="2" />
         <ellipse cx="108" cy="45" rx="10" ry="4" fill="#8fd14f" transform="rotate(-28 108 45)" />
         <ellipse cx="125" cy="42" rx="9" ry="3.6" fill="#8fd14f" transform="rotate(22 125 42)" />
-        <circle cx="28" cy="27" r="15" fill={INK} />
-        <circle cx="92" cy="27" r="15" fill={INK} />
-        <ellipse cx="60" cy="63" rx="48" ry="44" fill={PAPER} stroke={INK} strokeWidth="4" />
-        <ellipse cx="41" cy="56" rx="14" ry="17" fill={INK} transform="rotate(-14 41 56)" />
-        <ellipse cx="79" cy="56" rx="14" ry="17" fill={INK} transform="rotate(14 79 56)" />
+        <circle cx="28" cy="27" r="15" fill={PATCH} />
+        <circle cx="92" cy="27" r="15" fill={PATCH} />
+        <ellipse cx="60" cy="63" rx="48" ry="44" fill={FUR} stroke={PATCH} strokeWidth="4" />
+        <ellipse cx="41" cy="56" rx="14" ry="17" fill={PATCH} transform="rotate(-14 41 56)" />
+        <ellipse cx="79" cy="56" rx="14" ry="17" fill={PATCH} transform="rotate(14 79 56)" />
         <g
           ref={eyesRef}
           style={{ transformBox: "fill-box", transformOrigin: "center", transition: "transform .12s" }}
         >
-          <circle cx="41" cy="58" r="6.5" fill="#fff" />
-          <circle cx="79" cy="58" r="6.5" fill="#fff" />
+          <circle cx="41" cy="58" r="6.5" fill="var(--panda-eye,#fff)" />
+          <circle cx="79" cy="58" r="6.5" fill="var(--panda-eye,#fff)" />
           <g ref={pupilsRef} style={{ transition: "transform .15s" }}>
-            <circle cx="41" cy="58" r="3.2" fill={INK} />
-            <circle cx="79" cy="58" r="3.2" fill={INK} />
+            <circle cx="41" cy="58" r="3.2" fill={PATCH} />
+            <circle cx="79" cy="58" r="3.2" fill={PATCH} />
           </g>
         </g>
-        <ellipse cx="60" cy="76" rx="6.5" ry="4.6" fill={INK} />
-        <path d="M53 87 Q60 93 67 87" fill="none" stroke={INK} strokeWidth="3" strokeLinecap="round" />
+        <ellipse cx="60" cy="76" rx="6.5" ry="4.6" fill={PATCH} />
+        <path d="M53 87 Q60 93 67 87" fill="none" stroke={PATCH} strokeWidth="3" strokeLinecap="round" />
       </svg>
     </div>
   );

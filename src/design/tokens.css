@@ -38,12 +38,18 @@
   /* superficies */
   --paper: #faf7ef;
   --card: #fffdf6;
+  --surface: #ffffff;
   --line: rgba(96, 140, 190, 0.16);
   --margin: rgba(224, 100, 90, 0.5);
 
   /* tinta */
   --ink: #2d2a26;
   --ink-soft: #7a7466;
+
+  /* identidad del panda (tokenizado para claro/pizarra) */
+  --panda-fur: #fffdf6;
+  --panda-patch: #2d2a26;
+  --panda-eye: #ffffff;
 
   /* utilería de papelería */
   --tape: rgba(255, 222, 116, 0.85);
@@ -75,12 +81,13 @@
 
 html.dark,
 [data-theme="dark"] {
-  --paper: #282c30;
-  --card: #32373c;
-  --line: rgba(255, 255, 255, 0.06);
-  --margin: rgba(226, 104, 95, 0.55);
+  --paper: #202429;
+  --card: #33383f;
+  --surface: #363d45;
+  --line: rgba(255, 255, 255, 0.14);
+  --margin: rgba(226, 104, 95, 0.6);
   --ink: #f0ede3;
-  --ink-soft: #b3ad9f;
+  --ink-soft: #bdb7a8;
   --tape: rgba(255, 222, 116, 0.3);
   --postit: #6b6428;
   --mk-green: #a8e75f;
@@ -90,6 +97,9 @@ html.dark,
   --hl-orange: rgba(255, 183, 77, 0.34);
   --hl-red: rgba(255, 107, 94, 0.34);
   --shadow: rgba(0, 0, 0, 0.5);
+  --panda-fur: #ddd7c7;
+  --panda-patch: #17191d;
+  --panda-eye: #f2efe6;
 }
 
 /* ---------- base ---------- */
@@ -237,6 +247,57 @@ body {
     font-size: 15px;
   }
 
+  /* ---------- guía hacia el botón de Descargar (#39) ---------- */
+  /* Resaltado ESTÁTICO: halo/anillo garabateado siempre presente, para que el
+     botón de descarga se localice de un vistazo (color + el icono ⇩ del label,
+     nunca solo color). Permanece incluso con prefers-reduced-motion. */
+  .download-cta {
+    position: relative;
+    box-shadow:
+      4px 6px 0 var(--shadow),
+      0 0 0 4px var(--hl-orange);
+  }
+  /* Animación SUAVE de pulso; solo se aplica cuando el hook añade esta clase
+     (no hay reduced-motion). Doble defensa: `motion-reduce:animate-none` de
+     Tailwind y el `@media (prefers-reduced-motion: reduce)` global la anulan. */
+  .download-cta-animate {
+    animation: download-cta-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes download-cta-pulse {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+      box-shadow:
+        4px 6px 0 var(--shadow),
+        0 0 0 4px var(--hl-orange);
+    }
+    50% {
+      transform: translateY(-3px) rotate(-1deg);
+      box-shadow:
+        4px 9px 0 var(--shadow),
+        0 0 0 7px var(--hl-orange);
+    }
+  }
+
+  /* FAB "volver al inicio" (#40): rebote/wiggle suave, sin blur. Solo se aplica
+     cuando el hook añade esta clase (no hay reduced-motion). Doble defensa:
+     `motion-reduce:animate-none` de Tailwind y el `@media
+     (prefers-reduced-motion: reduce)` global la anulan. */
+  .home-fab-animate {
+    animation: home-fab-bounce 1.8s ease-in-out infinite;
+  }
+
+  @keyframes home-fab-bounce {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-4px) rotate(-2deg);
+    }
+  }
+
   /* badge de nivel: color + TEXTO + pose del panda (nunca solo color) */
   .badge {
     display: inline-flex;
@@ -358,7 +419,7 @@ body {
     position: relative;
     aspect-ratio: 3/4;
     cursor: pointer;
-    background: #fff;
+    background: var(--surface);
     border: 2.5px solid var(--ink);
     border-radius: 8px 5px 9px 4px/4px 9px 5px 8px;
     box-shadow: 2px 3px 0 var(--shadow);
@@ -366,7 +427,7 @@ body {
     place-items: center;
     font-family: var(--font-display);
     font-size: 20px;
-    color: #2d2a26;
+    color: var(--ink);
   }
   .pagecell[aria-pressed="true"] {
     background: var(--hl-green);
@@ -384,7 +445,7 @@ body {
   .sheet {
     position: relative;
     aspect-ratio: 3/4;
-    background: #fff;
+    background: var(--surface);
     border: 2.5px solid var(--ink);
     border-radius: 4px;
     box-shadow: 5px 6px 0 var(--shadow);

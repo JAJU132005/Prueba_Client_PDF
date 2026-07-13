@@ -185,10 +185,9 @@ export function Watermark({
     if (!previewPageSize) {
       return [];
     }
-    const options: WatermarkOptions = {
+    const options: Omit<WatermarkOptions, "image"> = {
       mode,
       text,
-      image: null,
       position,
       opacity,
       angle,

@@ -6,7 +6,6 @@ import type { OcrEngine } from "@/pdf/ocrPdf";
 import { organizePdf } from "@/pdf/organize";
 import { probe } from "@/pdf/probe";
 import { rotatePdf } from "@/pdf/rotate";
-import { signPdf } from "@/pdf/signature";
 import { splitPdf } from "@/pdf/split";
 import type { PdfCryptoEngine } from "@/pdf/protectPdf";
 import {
@@ -18,7 +17,6 @@ import {
   OrganizeFailedError,
   ProbeFailedError,
   RedactFailedError,
-  SignFailedError,
 } from "@/pdf/types";
 import { createPdfWorkerApi } from "@/workers/pdfWorkerApi";
 
@@ -300,39 +298,6 @@ describe("createPdfWorkerApi", () => {
         },
       ]),
     ).rejects.toBeInstanceOf(InvalidPdfError);
-  });
-
-  it("sign delega en signPdf y produce el mismo resultado (R10)", async () => {
-    const api = createPdfWorkerApi();
-    const pdf2 = await makePdf(2);
-    const png = makePng1x1();
-    const options = {
-      pageIndex: 1,
-      position: "center" as const,
-      widthPts: 40,
-      image: png,
-    };
-
-    const viaApi = await api.sign(pdf2, options);
-    const viaDomain = await signPdf(pdf2, options);
-
-    const outApi = await PDFDocument.load(viaApi);
-    const outDomain = await PDFDocument.load(viaDomain);
-    expect(outApi.getPageCount()).toBe(2);
-    expect(outApi.getPageCount()).toBe(outDomain.getPageCount());
-  });
-
-  it("sign propaga SignFailedError ante pageIndex fuera de rango (R10)", async () => {
-    const api = createPdfWorkerApi();
-    const pdf2 = await makePdf(2);
-    await expect(
-      api.sign(pdf2, {
-        pageIndex: 9,
-        position: "center",
-        widthPts: 40,
-        image: makePng1x1(),
-      }),
-    ).rejects.toBeInstanceOf(SignFailedError);
   });
 
   it("protect con contraseña vacía → ProtectFailedError sin tocar el motor (R17)", async () => {

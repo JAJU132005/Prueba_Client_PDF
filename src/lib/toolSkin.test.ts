@@ -10,7 +10,7 @@ import {
 import { TOOLS } from "@/lib/tools";
 
 describe("toolSkin", () => {
-  it("define una piel completa para cada una de las 16 herramientas (R27)", () => {
+  it("define una piel completa para cada una de las 15 herramientas (R27)", () => {
     for (const tool of TOOLS) {
       const skin = getToolSkin(tool.id);
       expect(skin, `falta piel de ${tool.id}`).toBeDefined();
@@ -19,7 +19,7 @@ describe("toolSkin", () => {
       expect(skin?.sceneTitle.length).toBeGreaterThan(0);
       expect(skin?.actionLabel.length).toBeGreaterThan(0);
     }
-    expect(Object.keys(TOOL_SKINS)).toHaveLength(16);
+    expect(Object.keys(TOOL_SKINS)).toHaveLength(15);
   });
 
   it("cada escena usa el slug del entregable (R27)", () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -48,6 +48,34 @@ function makeRasterizerFactory(pageCount = 2): PageRasterizerFactory {
     destroy: () => {},
   };
   return async () => rasterizer;
+}
+
+/**
+ * Factoría de rasterizador que registra los índices y signals de `renderPage`
+ * y cuyo render solo resuelve al abortarse: permite comprobar que la miniatura
+ * PDF rasteriza únicamente el índice 0 y es cancelable.
+ */
+function makeThumbRasterizer(): {
+  factory: PageRasterizerFactory;
+  signals: AbortSignal[];
+  indexes: number[];
+} {
+  const signals: AbortSignal[] = [];
+  const indexes: number[] = [];
+  const rasterizer: PageRasterizer = {
+    pageCount: () => 3,
+    renderPage: (index, _options, signal) => {
+      indexes.push(index);
+      signals.push(signal);
+      return new Promise<Blob>((_resolve, reject) => {
+        signal.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      });
+    },
+    destroy: () => {},
+  };
+  return { factory: async () => rasterizer, signals, indexes };
 }
 
 /** Wrapper controlado que mantiene la lista, como haría una herramienta real. */
@@ -329,20 +357,20 @@ describe("Dropzone", () => {
     ).toBeInTheDocument();
   });
 
-  it("no muestra el botón 'Vista previa' para un archivo no-PDF (R17)", () => {
-    const validationImg: FileValidationConfig = {
-      allowedExtensions: [".png"],
-      allowedMimeTypes: ["image/png"],
+  it("no muestra el botón 'Vista previa' para un archivo ni imagen ni PDF (R22)", () => {
+    const validationTxt: FileValidationConfig = {
+      allowedExtensions: [".txt"],
+      allowedMimeTypes: ["text/plain"],
       maxBytes: 1024,
     };
     render(
       <Dropzone
-        files={[makeFile("foto.png", "image/png", 100)]}
+        files={[makeFile("notas.txt", "text/plain", 100)]}
         onFilesChange={vi.fn()}
-        validation={validationImg}
+        validation={validationTxt}
       />,
     );
-    expect(screen.getByText("foto.png")).toBeInTheDocument();
+    expect(screen.getByText("notas.txt")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /vista previa/i }),
     ).not.toBeInTheDocument();
@@ -365,5 +393,79 @@ describe("Dropzone", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveAttribute("aria-label", expect.stringContaining("informe.pdf"));
+  });
+
+  it("una imagen produce una miniatura (object URL) en su fila y se revoca al desmontar (R12, R18)", () => {
+    const { unmount } = render(
+      <ControlledDropzone initial={[makeFile("foto.png", "image/png", 100)]} />,
+    );
+    const thumb = screen.getByRole("img", { name: /miniatura de foto\.png/i });
+    expect(thumb).toHaveAttribute("src", "blob:mock");
+    expect(URL.createObjectURL).toHaveBeenCalled();
+
+    unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock");
+  });
+
+  it("muestra el estado de carga 'Generando miniatura de …' mientras se rasteriza el PDF (R15)", async () => {
+    const thumb = makeThumbRasterizer();
+    const counter = makeCounter(() => new Promise<number>(() => {}));
+    const { container } = render(
+      <ControlledDropzone countPages={counter} createRasterizer={thumb.factory} />,
+    );
+    fireEvent.change(fileInput(container), {
+      target: { files: [makeFile("doc.pdf", "application/pdf", 200)] },
+    });
+
+    // El render de la miniatura nunca resuelve: la fila queda en carga y expone
+    // el placeholder accesible hasta que esté disponible o falle. (R15)
+    expect(
+      await screen.findByLabelText(/generando miniatura de doc\.pdf/i),
+    ).toBeInTheDocument();
+    // Todavía no hay <img> de miniatura para ese PDF (sigue generándose).
+    expect(
+      screen.queryByRole("img", { name: /miniatura de doc\.pdf/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("la miniatura PDF rasteriza solo la página 1 y es cancelable al quitar el archivo (R14, R17)", async () => {
+    const thumb = makeThumbRasterizer();
+    const counter = makeCounter(() => new Promise<number>(() => {}));
+    const { container } = render(
+      <ControlledDropzone countPages={counter} createRasterizer={thumb.factory} />,
+    );
+    fireEvent.change(fileInput(container), {
+      target: { files: [makeFile("doc.pdf", "application/pdf", 200)] },
+    });
+
+    await waitFor(() => expect(thumb.signals).toHaveLength(1));
+    // Solo se rasteriza el índice 0 (la primera página). (R14)
+    expect(thumb.indexes).toEqual([0]);
+    expect(thumb.signals[0].aborted).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: /quitar doc\.pdf/i }));
+    // Al quitar el archivo se aborta el signal pasado a renderPage. (R17)
+    await waitFor(() => expect(thumb.signals[0].aborted).toBe(true));
+  });
+
+  it("el botón 'Vista previa' de una imagen abre ImagePreviewModal (R22)", async () => {
+    render(
+      <ControlledDropzone initial={[makeFile("foto.png", "image/png", 100)]} />,
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /vista previa de foto\.png/i }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveAttribute(
+      "aria-label",
+      expect.stringContaining("foto.png"),
+    );
+    // El visor de imagen muestra la imagen desde una object URL local.
+    expect(
+      within(dialog).getByRole("img", { name: /vista previa de foto\.png/i }),
+    ).toBeInTheDocument();
   });
 });

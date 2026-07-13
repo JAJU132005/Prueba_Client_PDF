@@ -37,6 +37,14 @@ describe("PWA_OPTIONS — configuración del plugin PWA (R13–R21)", () => {
     expect(PWA_OPTIONS.registerType).toBe("autoUpdate");
   });
 
+  it("fija cleanupOutdatedCaches para cache-bustear builds anteriores (#42 R7)", () => {
+    expect(PWA_OPTIONS.workbox.cleanupOutdatedCaches).toBe(true);
+  });
+
+  it("reafirma registerType 'autoUpdate' para el control inmediato del SW nuevo (#42 R6)", () => {
+    expect(PWA_OPTIONS.registerType).toBe("autoUpdate");
+  });
+
   it("usa injectRegister false (registro explícito) (R19)", () => {
     expect(PWA_OPTIONS.injectRegister).toBe(false);
   });

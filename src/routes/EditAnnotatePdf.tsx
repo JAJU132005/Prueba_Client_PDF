@@ -8,7 +8,10 @@ import { ResultPanel } from "@/components/ResultPanel";
 import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { LivePreview } from "@/components/LivePreview";
 import { PdfPreviewModal } from "@/components/PdfPreviewModal";
+import { UndoControls } from "@/components/UndoControls";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
+import { useUndoableState } from "@/lib/useUndoableState";
+import { useUndoKeybinding } from "@/lib/useUndoKeybinding";
 import {
   DEFAULT_MAX_FILE_BYTES,
   type FileValidationConfig,
@@ -26,6 +29,7 @@ import {
   removeAnnotation,
   selectAnnotation,
   updateAnnotation,
+  type AnnotationEditorState,
   type AnnotationTool,
 } from "@/pdf/annotationModel";
 import { countPdfPages, type PageCounter } from "@/pdf/pageCount";
@@ -104,7 +108,10 @@ export function EditAnnotatePdf({
   const [files, setFiles] = useState<File[]>([]);
   const [pageCount, setPageCount] = useState(0);
   const [activePageIndex, setActivePageIndex] = useState(0);
-  const [editorState, setEditorState] = useState(createAnnotationState());
+  const history = useUndoableState<AnnotationEditorState>(
+    createAnnotationState(),
+  );
+  const editorState = history.present;
   const [activeTool, setActiveTool] = useState<AnnotationTool | null>(null);
   const [settings, setSettings] = useState<ToolSettings>(DEFAULT_TOOL_SETTINGS);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -116,12 +123,22 @@ export function EditAnnotatePdf({
   const [showPreview, setShowPreview] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
+  // Bandera de gesto activo (mover/redimensionar): decide entre `updateGesture`
+  // (transitorio, coalescido) y `set` (edición de texto discreta). (#37 R32)
+  const gestureActiveRef = useRef(false);
 
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
     };
   }, []);
+
+  // Atajo Ctrl+Z / Ctrl+Shift+Z; se ignora con foco en campos de texto. (#37 R31)
+  useUndoKeybinding({
+    onUndo: history.undo,
+    onRedo: history.redo,
+    enabled: files.length > 0,
+  });
 
   // Carga los bytes de la imagen de anotación cuando cambia el archivo elegido.
   useEffect(() => {
@@ -208,7 +225,8 @@ export function EditAnnotatePdf({
     setFiles(next);
     setPageCount(0);
     setActivePageIndex(0);
-    setEditorState(createAnnotationState());
+    history.reset(createAnnotationState()); // (#37 R33)
+    gestureActiveRef.current = false;
     setActiveTool(null);
     setStatus("idle");
     setProgress(0);
@@ -221,19 +239,37 @@ export function EditAnnotatePdf({
   }
 
   function handleAddAnnotation(annotation: Annotation): void {
-    setEditorState((prev) => addAnnotation(prev, annotation));
+    history.set((prev) => addAnnotation(prev, annotation)); // (#37 R27)
   }
 
   function handleUpdateAnnotation(annotation: Annotation): void {
-    setEditorState((prev) => updateAnnotation(prev, annotation));
+    // Durante un gesto de mover/redimensionar el cambio es transitorio y se
+    // coalescerá en UNA entrada al soltar; fuera de gesto (editar texto) es un
+    // commit discreto. (#37 R27, R32)
+    if (gestureActiveRef.current) {
+      history.updateGesture((prev) => updateAnnotation(prev, annotation));
+    } else {
+      history.set((prev) => updateAnnotation(prev, annotation));
+    }
   }
 
   function handleRemoveAnnotation(id: string): void {
-    setEditorState((prev) => removeAnnotation(prev, id));
+    history.set((prev) => removeAnnotation(prev, id)); // (#37 R27)
   }
 
   function handleSelectionChange(id: string | null): void {
-    setEditorState((prev) => selectAnnotation(prev, id));
+    // La selección NO versiona: cambio transitorio. (#37 R34)
+    history.replace((prev) => selectAnnotation(prev, id));
+  }
+
+  function handleGestureStart(): void {
+    gestureActiveRef.current = true;
+    history.beginGesture(); // (#37 R32)
+  }
+
+  function handleGestureEnd(): void {
+    history.endGesture(); // (#37 R32)
+    gestureActiveRef.current = false;
   }
 
   async function handleExport(): Promise<void> {
@@ -271,7 +307,8 @@ export function EditAnnotatePdf({
     setFiles([]);
     setPageCount(0);
     setActivePageIndex(0);
-    setEditorState(createAnnotationState());
+    history.reset(createAnnotationState()); // (#37 R33)
+    gestureActiveRef.current = false;
     setActiveTool(null);
     setImageFiles([]);
     setImageData(null);
@@ -320,6 +357,13 @@ export function EditAnnotatePdf({
               />
             </div>
 
+            <UndoControls
+              canUndo={history.canUndo}
+              canRedo={history.canRedo}
+              onUndo={history.undo}
+              onRedo={history.redo}
+            />
+
             <AnnotationEditor
               file={files[0]}
               pageCount={pageCount}
@@ -335,6 +379,8 @@ export function EditAnnotatePdf({
               onSelectionChange={handleSelectionChange}
               settings={settings}
               onSettingsChange={setSettings}
+              onGestureStart={handleGestureStart}
+              onGestureEnd={handleGestureEnd}
               imageData={imageData}
               createId={createId}
               createRasterizer={createRasterizer}

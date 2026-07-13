@@ -13,7 +13,6 @@ import { probe } from "@/pdf/probe";
 import { protectPdf, type PdfCryptoEngine } from "@/pdf/protectPdf";
 import { redactPdf } from "@/pdf/redact";
 import { rotatePdf } from "@/pdf/rotate";
-import { signPdf } from "@/pdf/signature";
 import { splitPdf } from "@/pdf/split";
 import { addWatermark } from "@/pdf/watermark";
 import type { PdfWorkerApi } from "@/workers/contract";
@@ -61,9 +60,6 @@ export function createPdfWorkerApi(
     },
     async annotate(input, annotations, onProgress) {
       return flattenAnnotations(input, annotations, onProgress);
-    },
-    async sign(input, options, onProgress) {
-      return signPdf(input, options, onProgress);
     },
     async detectForm(input) {
       return detectFormFields(input);

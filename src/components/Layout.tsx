@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { FloatingHomeButton } from "@/components/FloatingHomeButton";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { OfflineEducationBanner } from "@/components/OfflineEducationBanner";
@@ -15,6 +16,7 @@ export function Layout(props: { children: ReactNode }): JSX.Element {
       </main>
       <Footer />
       <PandaWidget />
+      <FloatingHomeButton />
     </div>
   );
 }

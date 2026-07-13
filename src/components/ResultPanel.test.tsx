@@ -19,7 +19,7 @@ describe("ResultPanel", () => {
     expect(screen.getByText("unido.pdf")).toBeInTheDocument();
   });
 
-  it("el botón de descarga dispara el handler de descarga recibido (R25)", () => {
+  it("el botón de descarga dispara el handler de descarga recibido (R25, #39 R8, R12)", () => {
     const onDownload = vi.fn();
     render(
       <ResultPanel
@@ -33,6 +33,20 @@ describe("ResultPanel", () => {
       screen.getByRole("button", { name: /descargar resultado/i }),
     );
     expect(onDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it("el botón de descarga expone el resaltado guiado `download-cta` (#39 R1, R8)", () => {
+    render(
+      <ResultPanel
+        fileName="salida.pdf"
+        onDownload={() => {}}
+        onReset={() => {}}
+        costLevel="light"
+      />,
+    );
+    const button = screen.getByTestId("download-cta");
+    expect(button).toHaveClass("download-cta");
+    expect(button).toHaveAttribute("data-download-guided", "true");
   });
 
   it("el botón 'procesar otro' dispara el reinicio recibido (R25)", () => {

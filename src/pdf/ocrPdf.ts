@@ -8,7 +8,11 @@
  */
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
-import { OcrFailedError, type ProgressCallback } from "@/pdf/types";
+import {
+  OcrFailedError,
+  PdfWorkerError,
+  type ProgressCallback,
+} from "@/pdf/types";
 
 /**
  * Idiomas OCR soportados (códigos Tesseract). Catálogo ampliado #32 (paridad
@@ -256,15 +260,26 @@ export async function ocrImages(
   const recognitions: OcrPageRecognition[] = [];
 
   for (let i = 0; i < total; i++) {
-    const recognition = await engine.recognize(
-      pages[i],
-      options.language,
-      // Progreso real por página → progreso global. (R11)
-      (fraction) => {
-        const clamped = fraction < 0 ? 0 : fraction > 1 ? 1 : fraction;
-        onProgress?.((i + clamped) / total);
-      },
-    );
+    let recognition: OcrPageRecognition;
+    try {
+      recognition = await engine.recognize(
+        pages[i],
+        options.language,
+        // Progreso real por página → progreso global. (R11)
+        (fraction) => {
+          const clamped = fraction < 0 ? 0 : fraction > 1 ? 1 : fraction;
+          onProgress?.((i + clamped) / total);
+        },
+      );
+    } catch (error) {
+      // Un fallo del motor (creación del worker / reconocimiento) se propaga
+      // SIEMPRE como OcrFailedError, con `name` estable que cruza el límite del
+      // worker, para que la UI muestre el mensaje específico. (#34 R5)
+      if (error instanceof PdfWorkerError) {
+        throw error; // Ya es OcrFailedError u otro error de dominio: se relanza.
+      }
+      throw new OcrFailedError();
+    }
     recognitions.push(recognition);
     texts.push(recognition.text);
     // Garantiza un progreso monótono al cerrar cada página. (R9)

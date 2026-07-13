@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plantilla 04-editor-preview — Marca de agua</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Gochi+Hand&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens/tokens.css">
+<script src="../../shared/panda-art.js" defer></script>
+<script src="../../shared/panda-widget.js" defer></script>
+<style>
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+  .estado { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); letter-spacing: .08em; text-transform: uppercase; margin: 40px 0 10px; }
+  .optpanel { padding: 16px 18px; background: var(--card); border: 2.5px solid var(--ink); border-radius: 18px 10px 20px 8px/8px 20px 10px 18px; box-shadow: 3px 4px 0 var(--shadow); }
+  .ruler { width: 100%; accent-color: var(--mk-orange); }
+</style>
+</head>
+<body>
+
+<header class="wrap" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:20px">
+  <a class="hand" href="../../home/index.html" style="font-size:19px;color:var(--ink);text-decoration:none;box-shadow:inset 0 -8px 0 var(--hl-green)">← volver al cuaderno</a>
+  <div style="flex:1"></div>
+  <span class="badge lv-ligera">✓ 100% local</span>
+</header>
+
+<main class="wrap" style="padding-bottom:40px">
+  <p class="mono soft" style="margin:24px 0 0;font-size:12px">PLANTILLA 04-EDITOR-PREVIEW · 1 archivo + lienzo de previsualización en vivo · herramientas: Números (/page-numbers), Marca de agua (/watermark), Editar/Anotar (/edit 🔴), Firmar (/sign), Rellenar (/fill-forms), Redactar (/redact)</p>
+
+  <!-- Representativa: Marca de agua -->
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px">
+    <span class="scrawl" style="font-size:24px;display:grid;place-items:center;width:56px;height:56px;border:2.5px dashed var(--ink);border-radius:60% 40% 55% 45%/45% 55% 40% 60%;background:var(--hl-green)">≋</span>
+    <h1 class="hand" style="margin:0;font-size:clamp(32px,4vw,46px)"><span class="hl-ligera">Marca de agua</span></h1>
+    <span class="badge lv-ligera">Ligera · Pan comido</span>
+  </div>
+  <div style="margin-top:6px;display:flex;align-items:center;gap:12px">
+    <panda-art kind="pose-ligera" style="width:72px"></panda-art>
+    <p class="hand soft" style="margin:0;font-size:17px">Tu dispositivo ni se despeina.</p>
+  </div>
+
+  <div class="card" style="margin-top:22px;max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-ligera">El rodillo de pintura fantasma</span> <span class="scrawl soft" style="font-size:20px">~fssshh~</span></h2>
+    <panda-art kind="marca-de-agua" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+  </div>
+
+  <p class="estado">estado · LivePreview + controles (sliders = reglas de escuela)</p>
+  <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start">
+    <div style="flex:0 1 400px;min-width:290px">
+      <div class="sheet">
+        <span class="hand" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-30deg);opacity:.3;font-size:34px;letter-spacing:2px;color:#4a6a8a;white-space:nowrap">CONFIDENCIAL</span>
+      </div>
+      <p class="mono soft" style="margin:8px 0 0;font-size:12px">la marca se desvanece en vivo al mover la regla de opacidad (el panda entrecierra los ojos)</p>
+    </div>
+    <div style="flex:1 1 320px;min-width:280px;display:flex;flex-direction:column;gap:16px">
+      <div class="optpanel">
+        <h3 class="hand" style="margin:0 0 10px;font-size:21px">Pestañas del cuaderno</h3>
+        <div style="display:flex;gap:8px">
+          <button class="btn" type="button" aria-pressed="true" style="background:var(--hl-green)">Texto</button>
+          <button class="btn" type="button">Imagen</button>
+        </div>
+        <label class="hand" style="display:block;margin-top:12px;font-size:18px">Texto de la marca
+          <input value="CONFIDENCIAL" style="display:block;width:100%;font-family:var(--font-display);font-size:18px;color:var(--ink);background:var(--paper);border:none;border-bottom:2.5px dashed var(--ink);padding:6px 4px;outline:none">
+        </label>
+      </div>
+      <div class="optpanel">
+        <h3 class="hand" style="margin:0 0 6px;font-size:21px">Opacidad (regla de escuela)</h3>
+        <input class="ruler" type="range" min="5" max="90" value="30">
+        <h3 class="hand" style="margin:14px 0 6px;font-size:21px">Ángulo (regla de escuela)</h3>
+        <input class="ruler" type="range" min="-60" max="60" value="-30">
+      </div>
+      <button class="btn btn-primary lv-ligera" type="button" style="align-self:flex-start">Pasar el rodillo</button>
+    </div>
+  </div>
+
+  <!-- Variantes -->
+  <p class="estado">variante · Números de página (/page-numbers)</p>
+  <div class="card" style="max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-ligera">El sello numerador</span> <span class="scrawl soft" style="font-size:20px">¡KA-CHUNK!</span></h2>
+    <panda-art kind="numeros" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+    <p class="hand" style="margin:12px 0 6px;font-size:17px">Posición = tocar un post-it en la esquina/centro de la hoja:</p>
+    <div style="display:grid;grid-template-columns:repeat(3,60px);gap:10px">
+      <button type="button" class="hand" style="height:44px;font-size:20px;background:var(--postit);border:2px solid rgba(0,0,0,.25);cursor:pointer;transform:rotate(-2deg);box-shadow:2px 3px 0 var(--shadow);color:var(--ink)">↖</button>
+      <button type="button" class="hand" style="height:44px;font-size:20px;background:var(--postit);border:2px solid rgba(0,0,0,.25);cursor:pointer;transform:rotate(2deg);box-shadow:2px 3px 0 var(--shadow);color:var(--ink)">↑</button>
+      <button type="button" class="hand" style="height:44px;font-size:20px;background:var(--postit);border:2px solid rgba(0,0,0,.25);cursor:pointer;transform:rotate(-2deg);box-shadow:2px 3px 0 var(--shadow);color:var(--ink)">↗</button>
+      <button type="button" class="hand" style="height:44px;font-size:20px;background:var(--postit);border:2px solid rgba(0,0,0,.25);cursor:pointer;transform:rotate(2deg);box-shadow:2px 3px 0 var(--shadow);color:var(--ink)">↙</button>
+      <button type="button" class="hand" style="height:44px;font-size:20px;background:var(--postit);border:2px solid rgba(0,0,0,.25);cursor:pointer;transform:rotate(-2deg);box-shadow:2px 3px 0 var(--shadow);color:var(--ink)">↓</button>
+      <button type="button" class="hand" aria-pressed="true" style="height:44px;font-size:20px;background:var(--hl-green);border:2px solid rgba(0,0,0,.25);cursor:pointer;transform:rotate(2deg);box-shadow:2px 3px 0 var(--shadow);color:var(--ink)">↘</button>
+    </div>
+    <p class="hand soft" style="margin:10px 0 0;font-size:16px">Formatos del sello: «1» · «1 / 12» · «Página 1». Al cambiar, KA-CHUNK en la esquina elegida de la LivePreview.</p>
+  </div>
+
+  <p class="estado">variante · Firmar (/sign)</p>
+  <div class="card" style="max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-media">El autógrafo</span></h2>
+    <panda-art kind="firmar" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+    <div style="margin-top:12px;height:100px;border:2.5px dashed var(--ink-soft);border-radius:10px;display:grid;place-items:center">
+      <span class="scrawl soft" style="font-size:26px">firma aquí ✗__________</span>
+    </div>
+    <p class="hand soft" style="margin:10px 0 0;font-size:16px">* Firma visual, no certificada (nota al pie manuscrita existente). Colocar en la LivePreview = arrastrar un papelito; el panda sigue tu trazo con la mirada.</p>
+  </div>
+
+  <p class="estado">variante · Rellenar formularios (/fill-forms)</p>
+  <div class="card" style="max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-media">El examen escolar</span> <span class="scrawl soft" style="font-size:20px">10/10</span></h2>
+    <panda-art kind="rellenar" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+    <p class="hand" style="margin:12px 0 0;font-size:17px">Campos AcroForm = preguntas de examen con espacios subrayados; se rellenan en vivo en la LivePreview. «Aplanar» = pasar el examen a tinta (tooltip: «ya no se puede borrar»). PDF sin campos → el panda encoge los hombros y ofrece el camino alternativo existente (texto encima).</p>
+  </div>
+
+  <p class="estado">variante · Redactar (/redact) — el humor baja un punto</p>
+  <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+    <div class="card" style="flex:1 1 420px;max-width:640px">
+      <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-media">Expediente clasificado</span></h2>
+      <panda-art kind="redactar" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+      <p class="hand" style="margin:12px 0 0;font-size:17px">El usuario dibuja cajas negras de marcador grueso sobre la LivePreview; al exportar, sello rojo «CLASIFICADO ✔».</p>
+    </div>
+    <div style="flex:1 1 300px;min-width:280px;position:relative;padding:18px 20px;background:var(--card);border:2.5px solid var(--ink);border-radius:6px;box-shadow:4px 5px 0 var(--shadow)">
+      <span style="position:absolute;top:-8px;left:22px;width:26px;height:8px;background:#98a0a8;border-radius:2px;transform:rotate(-4deg)"></span>
+      <p class="hand" style="margin:0;font-size:19px">Ficha del expediente — léela en serio:</p>
+      <p style="margin:8px 0 0;font-size:15px;line-height:1.5;font-weight:600">Las páginas con redacciones se rasterizan (se convierten en imagen) y pierden el texto seleccionable. A cambio, el contenido tapado queda <b>eliminado del archivo de verdad</b>, no solo cubierto. Las páginas sin redacciones conservan su texto y calidad.</p>
+      <p class="mono soft" style="margin:8px 0 0;font-size:11px">aviso crítico existente — no alterar ni suavizar su contenido</p>
+    </div>
+  </div>
+
+  <p class="estado">variante · Editar / Anotar (/edit) — PESADA 🔴</p>
+  <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+    <div class="card" style="flex:1 1 420px;max-width:640px">
+      <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-pesada">El estuche completo</span> <span class="scrawl soft" style="font-size:20px">¡PSSSH!</span></h2>
+      <panda-art kind="editar" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn" type="button" aria-pressed="true" style="background:var(--hl-red)">Texto</button>
+        <button class="btn" type="button">Resaltador</button>
+        <button class="btn" type="button">Lápiz</button>
+        <button class="btn" type="button">Formas</button>
+        <button class="btn" type="button">Imagen</button>
+      </div>
+      <p class="hand soft" style="margin:12px 0 0;font-size:16px">Nota del profesor al margen: se añade una capa de anotación, no se reescribe el texto original. Al exportar, el panda «plancha» las capas.</p>
+    </div>
+    <div class="postit" style="flex:0 0 210px">⚠️ En móvil esto suda de verdad</div>
+  </div>
+
+  <p class="estado">notas para el implementer</p>
+  <div class="postit" style="max-width:560px;transform:rotate(-1deg)">
+    Compartidos: Dropzone, FileList, LivePreview (protagonista), controles de colocación por herramienta,
+    ProgressBar, ResultPanel. Cablear a `pageNumbers` / `watermark` / `annotate` / `sign` / `fillForms` / `redact`.
+    Los avisos existentes (firma no certificada, capa de anotación, rasterizado de redacción) conservan su texto íntegro.
+  </div>
+</main>
+
+<panda-widget></panda-widget>
+</body>
+</html>

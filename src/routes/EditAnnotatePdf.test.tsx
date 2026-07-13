@@ -106,9 +106,6 @@ function fakeClient(annotate: PdfClient["annotate"]): PdfClient {
       return new Uint8Array();
     },
     annotate,
-    async sign() {
-      return new Uint8Array();
-    },
     async detectForm() {
       return { hasFields: false, fields: [] };
     },
@@ -253,6 +250,48 @@ describe("EditAnnotatePdf — exportación (R22, R26, R27)", () => {
     expect(
       screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("EditAnnotatePdf — deshacer/rehacer (#37 R27, R33)", () => {
+  it("Deshacer revierte la última anotación y Rehacer la restaura (R27)", async () => {
+    const { container } = renderAt(fakeClient(async () => new Uint8Array([1])));
+
+    await addPdfAndAnnotation(container, "Hola");
+    expect(screen.getByTestId("annotation-text")).toHaveTextContent("Hola");
+
+    const undo = screen.getByRole("button", { name: "Deshacer" });
+    expect(undo).toBeEnabled();
+    fireEvent.click(undo);
+    expect(screen.queryByTestId("annotation-text")).not.toBeInTheDocument();
+
+    const redo = screen.getByRole("button", { name: "Rehacer" });
+    expect(redo).toBeEnabled();
+    fireEvent.click(redo);
+    expect(screen.getByTestId("annotation-text")).toHaveTextContent("Hola");
+  });
+
+  it("el atajo Ctrl+Z revierte la última anotación (R27)", async () => {
+    const { container } = renderAt(fakeClient(async () => new Uint8Array([1])));
+
+    await addPdfAndAnnotation(container, "Atajo");
+    expect(screen.getByTestId("annotation-text")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    expect(screen.queryByTestId("annotation-text")).not.toBeInTheDocument();
+  });
+
+  it("cargar un archivo nuevo deja el historial vacío (Deshacer deshabilitado) (R33)", async () => {
+    const { container } = renderAt(fakeClient(async () => new Uint8Array([1])));
+
+    await addPdfAndAnnotation(container, "Uno");
+    expect(screen.getByRole("button", { name: "Deshacer" })).toBeEnabled();
+
+    addPdf(container, makePdfFile("b.pdf", [4, 5, 6]));
+    // Re-monta el editor tras recontar páginas del nuevo archivo.
+    await screen.findByTestId("annotation-overlay");
+    expect(screen.getByRole("button", { name: "Deshacer" })).toBeDisabled();
+    expect(screen.queryByTestId("annotation-text")).not.toBeInTheDocument();
   });
 });
 

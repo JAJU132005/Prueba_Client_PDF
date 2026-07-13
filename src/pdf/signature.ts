@@ -1,175 +1,7 @@
-import { PDFDocument } from "pdf-lib";
-
 import type { Annotation, AnnotationColor, PdfPoint } from "@/pdf/annotate";
-import { detectImageType } from "@/pdf/imagesToPdf";
-import {
-  InvalidImageError,
-  InvalidPdfError,
-  SignFailedError,
-  type ProgressCallback,
-} from "@/pdf/types";
-import {
-  computeWatermarkPosition,
-  WATERMARK_MARGIN,
-  type WatermarkPosition,
-} from "@/pdf/watermark";
-
-/**
- * Opciones de la operación de firma VISUAL (no criptográfica): colocar una
- * imagen de firma (JPG/PNG) en una página y posición concretas.
- */
-export interface SignOptions {
-  /** Índice 0-indexado de la página donde se coloca la firma. */
-  pageIndex: number;
-  /** Posición de la rejilla 3×3 reutilizada de la marca de agua (#12). */
-  position: WatermarkPosition;
-  /** Ancho objetivo de la firma en puntos PDF (escala explícita). */
-  widthPts: number;
-  /** Bytes de la imagen de firma (JPG o PNG). */
-  image: Uint8Array;
-}
-
-/** Tamaño de dibujo de la firma en puntos PDF. */
-export interface SignatureSize {
-  width: number;
-  height: number;
-}
-
-/** Colocación final de la firma: ancla inferior-izquierda + tamaño de dibujo. */
-export interface SignaturePlacement {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
- * Escala la imagen de firma a `targetWidthPts` preservando la relación de
- * aspecto: `width === targetWidthPts` y `height === imageHeight *
- * (targetWidthPts / imageWidth)`. Función pura: sin React, sin DOM. (R1)
- */
-export function computeSignatureSize(
-  imageWidth: number,
-  imageHeight: number,
-  targetWidthPts: number,
-): SignatureSize {
-  return {
-    width: targetWidthPts,
-    height: imageHeight * (targetWidthPts / imageWidth),
-  };
-}
-
-/**
- * Deriva el ancla inferior-izquierda de la firma para una posición de la rejilla
- * 3×3, reutilizando `computeSignatureSize` (aspecto a un ancho dado) y
- * `computeWatermarkPosition` (ancla genérica de rejilla). Función pura. (R2)
- */
-export function computeSignaturePlacement(
-  imageWidth: number,
-  imageHeight: number,
-  pageWidth: number,
-  pageHeight: number,
-  targetWidthPts: number,
-  position: WatermarkPosition,
-  margin: number,
-): SignaturePlacement {
-  const { width, height } = computeSignatureSize(
-    imageWidth,
-    imageHeight,
-    targetWidthPts,
-  );
-  const { x, y } = computeWatermarkPosition(
-    position,
-    pageWidth,
-    pageHeight,
-    width,
-    height,
-    margin,
-  );
-  return { x, y, width, height };
-}
-
-/**
- * Coloca (incrusta y dibuja) la imagen de firma en la página y posición elegidas
- * de `input` y devuelve los bytes del PDF resultante. Firma VISUAL, no
- * criptográfica. (R3–R9)
- * - Lanza `SignFailedError` si `widthPts` no es finito o `<= 0` (R8) o si
- *   `pageIndex` no es un entero dentro de `0..pageCount-1` (R5) → sin salida.
- * - Lanza `InvalidImageError` si la firma no tiene firma JPG/PNG o pdf-lib no
- *   puede incrustarla (R6) → sin salida.
- * - Lanza `InvalidPdfError` si `input` no es un PDF cargable (R7) → sin salida.
- * - Conserva el número de páginas (R4) y emite progreso en [0,1] terminando en
- *   1 (R9).
- * Función pura respecto a React/DOM (usa pdf-lib, que es JS puro).
- */
-export async function signPdf(
-  input: Uint8Array,
-  options: SignOptions,
-  onProgress?: ProgressCallback,
-): Promise<Uint8Array> {
-  onProgress?.(0);
-
-  if (!Number.isFinite(options.widthPts) || options.widthPts <= 0) {
-    throw new SignFailedError("El ancho de la firma no es válido."); // (R8)
-  }
-
-  const type = detectImageType(options.image);
-  if (type === null) {
-    throw new InvalidImageError("La firma no es un JPG o PNG válido."); // (R6)
-  }
-
-  let doc: PDFDocument;
-  try {
-    doc = await PDFDocument.load(input);
-  } catch {
-    throw new InvalidPdfError("El archivo no es un PDF válido."); // (R7)
-  }
-
-  const pageCount = doc.getPageCount();
-  if (
-    !Number.isInteger(options.pageIndex) ||
-    options.pageIndex < 0 ||
-    options.pageIndex >= pageCount
-  ) {
-    throw new SignFailedError("La página indicada no existe."); // (R5)
-  }
-
-  let embedded;
-  try {
-    embedded =
-      type === "jpeg"
-        ? await doc.embedJpg(options.image)
-        : await doc.embedPng(options.image);
-  } catch {
-    throw new InvalidImageError("La firma no se puede incrustar."); // (R6)
-  }
-
-  onProgress?.(0.5); // (R9)
-
-  const page = doc.getPage(options.pageIndex);
-  const { width: pageWidth, height: pageHeight } = page.getSize();
-  const placement = computeSignaturePlacement(
-    embedded.width,
-    embedded.height,
-    pageWidth,
-    pageHeight,
-    options.widthPts,
-    options.position,
-    WATERMARK_MARGIN,
-  );
-  page.drawImage(embedded, {
-    x: placement.x,
-    y: placement.y,
-    width: placement.width,
-    height: placement.height,
-  }); // (R3)
-
-  onProgress?.(1); // (R9)
-  return doc.save(); // (R4)
-}
 
 // ---------------------------------------------------------------------------
-// Colocación libre (#30). Añadido ADITIVO: geometría pura de arrastrar/
+// Colocación libre (#30). Geometría pura de arrastrar/
 // redimensionar la firma y puente firma → anotaciones de imagen/texto que se
 // aplanan con `flattenAnnotations` (vía `pdfClient.annotate`). Sin React/DOM.
 // ---------------------------------------------------------------------------
@@ -335,4 +167,126 @@ export function formatSignatureDate(date: Date): string {
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+// ---------------------------------------------------------------------------
+// Herramienta de firma unificada (#36). Modelo de LISTA de firmas colocadas:
+// varias firmas independientes que se añaden/mueven/redimensionan/eliminan y se
+// aplican a N páginas en UNA sola exportación. Operaciones puras, inmutables,
+// sin React ni DOM. La conversión firma → anotaciones REUTILIZA
+// `buildSignatureAnnotations` (ya testeado en #30). (R1–R10)
+// ---------------------------------------------------------------------------
+
+/**
+ * Firma colocada e independiente: su imagen, su caja en puntos PDF, su relación
+ * de aspecto intrínseca, las páginas donde aparece y los extras opcionales.
+ */
+export interface PlacedSignature {
+  /** Identificador estable de esta firma dentro de la lista. */
+  id: string;
+  /** Bytes de la imagen de firma (JPG o PNG). */
+  image: Uint8Array;
+  /** Caja de colocación en puntos PDF (origen inferior-izquierdo). */
+  box: FreePlacement;
+  /** Relación de aspecto intrínseca (`width / height`) para redimensionar. */
+  aspectRatio: number;
+  /** Índices 0-indexados de las páginas donde se coloca la firma. */
+  pageIndices: readonly number[];
+  /** Elementos opcionales colocables junto a la firma (fecha/texto). */
+  extras?: readonly SignatureExtra[];
+}
+
+/**
+ * Añade `sig` al final de la lista, devolviendo una lista NUEVA
+ * (`length + 1`) sin mutar `list`. (R1)
+ */
+export function addPlacedSignature(
+  list: readonly PlacedSignature[],
+  sig: PlacedSignature,
+): PlacedSignature[] {
+  return [...list, sig];
+}
+
+/**
+ * Reemplaza la `box` ÚNICAMENTE de la entrada con ese `id`, devolviendo una
+ * lista NUEVA sin mutar `list` ni el resto de entradas. (R2)
+ */
+export function updatePlacedSignatureBox(
+  list: readonly PlacedSignature[],
+  id: string,
+  box: FreePlacement,
+): PlacedSignature[] {
+  return list.map((sig) => (sig.id === id ? { ...sig, box } : sig));
+}
+
+/**
+ * Reemplaza los `pageIndices` ÚNICAMENTE de la entrada con ese `id`, devolviendo
+ * una lista NUEVA sin mutar `list` ni el resto de entradas. (R3)
+ */
+export function updatePlacedSignaturePages(
+  list: readonly PlacedSignature[],
+  id: string,
+  pageIndices: readonly number[],
+): PlacedSignature[] {
+  return list.map((sig) => (sig.id === id ? { ...sig, pageIndices } : sig));
+}
+
+/**
+ * Quita la entrada de ese `id`, devolviendo una lista NUEVA con el resto de
+ * entradas intactas y sin mutar `list`. (R4)
+ */
+export function removePlacedSignature(
+  list: readonly PlacedSignature[],
+  id: string,
+): PlacedSignature[] {
+  return list.filter((sig) => sig.id !== id);
+}
+
+/**
+ * Hit-test de selección: devuelve el `id` de la ÚLTIMA firma de `list` (la
+ * superior en orden de dibujo) cuya `box` contiene `point`, o `null` si ninguna
+ * caja lo contiene. (R5)
+ */
+export function findSignatureAt(
+  list: readonly PlacedSignature[],
+  point: PdfPoint,
+): string | null {
+  for (let i = list.length - 1; i >= 0; i--) {
+    const { box } = list[i];
+    if (
+      point.x >= box.x &&
+      point.x <= box.x + box.width &&
+      point.y >= box.y &&
+      point.y <= box.y + box.height
+    ) {
+      return list[i].id;
+    }
+  }
+  return null;
+}
+
+/**
+ * Puente lista de firmas → anotaciones para UNA sola exportación. Por cada firma
+ * de `list` reutiliza `buildSignatureAnnotations` (ya testeado en #30): una
+ * anotación `image` por página con la geometría de su `box` y sus bytes (R7),
+ * correspondientemente distinta por firma (R8), una por cada `pageIndex` (R9), y
+ * una anotación `text` por página y extra (R10). Concatena en orden. Pura.
+ */
+export function buildPlacedSignatureAnnotations(
+  list: readonly PlacedSignature[],
+  makeId: (signatureId: string, pageIndex: number, part: string) => string,
+): Annotation[] {
+  const annotations: Annotation[] = [];
+  for (const sig of list) {
+    annotations.push(
+      ...buildSignatureAnnotations(
+        sig.box,
+        sig.image,
+        sig.pageIndices,
+        sig.extras ?? [],
+        (pageIndex, part) => makeId(sig.id, pageIndex, part),
+      ),
+    );
+  }
+  return annotations;
 }

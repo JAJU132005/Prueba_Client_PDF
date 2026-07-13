@@ -8,10 +8,11 @@ import {
   type PdfPoint,
 } from "@/pdf/annotate";
 import {
+  findSignatureAt,
   moveSignatureBox,
   resizeSignatureBox,
   type FreePlacement,
-  type SignatureExtra,
+  type PlacedSignature,
   type SignatureHandle,
 } from "@/pdf/signature";
 import type { PageRasterizer, PageRasterizerFactory } from "@/pdf/rasterize";
@@ -24,19 +25,23 @@ const HANDLE_SIZE_PX = 10;
 export interface SignaturePlacementCanvasProps {
   /** PDF fuente; sus bytes se leen frescos (sin red) para rasterizar. */
   file: File;
-  /** Índice 0-indexado de la página activa donde se coloca la firma. */
+  /** Índice 0-indexado de la página activa donde se colocan las firmas. */
   pageIndex: number;
-  /** Caja de la firma en puntos PDF (controlada por la ruta). */
-  placement: FreePlacement;
-  /** Notifica la nueva caja tras mover/redimensionar. (R11, R12, R13) */
-  onPlacementChange: (placement: FreePlacement) => void;
-  /** Relación de aspecto intrínseca de la firma (`width / height`). (R13) */
-  aspectRatio: number;
-  /** Object URL de la firma para dibujarla dentro de la caja (opcional). */
-  signatureUrl?: string | null;
-  /** Extras colocables (fecha, iniciales/nombre) de la página activa. (R25) */
-  extras?: readonly SignatureExtra[];
-  /** Tamaño mínimo (pts PDF) de la caja al redimensionar. (R5) */
+  /** LISTA de firmas colocadas (controlada por la ruta). (R16–R18) */
+  placements: readonly PlacedSignature[];
+  /** `id` de la firma seleccionada (muestra tiradores) o `null`. (R16) */
+  selectedId: string | null;
+  /** Selección por clic; resuelta con `findSignatureAt`. (R16) */
+  onSelect: (id: string | null) => void;
+  /** Notifica la nueva caja de la firma `id` tras mover/redimensionar. (R17, R18) */
+  onPlacementChange: (id: string, box: FreePlacement) => void;
+  /** Inicio de un gesto de mover/redimensionar (coalescing del undo). (#37 R32) */
+  onGestureStart?: () => void;
+  /** Fin de un gesto de mover/redimensionar (sella la entrada de undo). (#37 R32) */
+  onGestureEnd?: () => void;
+  /** Object URL de la imagen por `id` de firma, para dibujarla dentro de su caja. */
+  signatureUrls?: Record<string, string | null>;
+  /** Tamaño mínimo (pts PDF) de la caja al redimensionar. */
   minSize?: number;
   /** Escala de render de la página; por defecto 1 (1 punto PDF = 1 px). */
   scale?: number;
@@ -44,28 +49,31 @@ export interface SignaturePlacementCanvasProps {
   createRasterizer?: PageRasterizerFactory;
 }
 
-/** Gesto de puntero en curso sobre la caja de firma. */
+/** Gesto de puntero en curso sobre una firma. */
 type Gesture =
-  | { type: "move"; original: FreePlacement; start: PdfPoint }
-  | { type: "resize"; handle: SignatureHandle }
+  | { type: "move"; id: string; original: FreePlacement; start: PdfPoint }
+  | { type: "resize"; id: string; handle: SignatureHandle; aspectRatio: number }
   | null;
 
 /**
- * Lienzo interactivo de colocación LIBRE de la firma (#30). Rasteriza el fondo
- * de la página activa con el `PageRasterizer` (async cancelable, patrón de #29) y
- * superpone una capa SVG con una ÚNICA caja de firma (más los extras de la
- * página). Convierte puntero↔PDF con `canvasPointToPdf`/`pdfPointToCanvas` y
- * delega TODA la aritmética en `signature.ts` (`moveSignatureBox`,
- * `resizeSignatureBox`). No contiene lógica de pdf-lib. (R11, R12, R13)
+ * Lienzo interactivo de colocación LIBRE de VARIAS firmas (#36). Rasteriza el
+ * fondo de la página activa con el `PageRasterizer` (async cancelable, patrón de
+ * #29) y superpone una capa SVG con TODAS las cajas de firma de esa página; la
+ * seleccionada muestra tiradores. Convierte puntero↔PDF con `canvasPointToPdf`/
+ * `pdfPointToCanvas` (R11) y delega TODA la aritmética en `signature.ts`
+ * (`findSignatureAt` para seleccionar, `moveSignatureBox`/`resizeSignatureBox`
+ * para editar). No contiene lógica de pdf-lib. (R11, R16, R17, R18)
  */
 export function SignaturePlacementCanvas({
   file,
   pageIndex,
-  placement,
+  placements,
+  selectedId,
+  onSelect,
   onPlacementChange,
-  aspectRatio,
-  signatureUrl,
-  extras = [],
+  onGestureStart,
+  onGestureEnd,
+  signatureUrls,
   minSize = 8,
   scale = 1,
   createRasterizer = createPdfjsPageRasterizer,
@@ -85,6 +93,15 @@ export function SignaturePlacementCanvas({
   const gestureRef = useRef<Gesture>(null);
 
   const pageHeightPts = viewSize ? viewSize.height / scale : 0;
+
+  // Firmas visibles en la página activa (una firma puede vivir en varias).
+  const pagePlacements = placements.filter((p) =>
+    p.pageIndices.includes(pageIndex),
+  );
+  const selected =
+    selectedId === null
+      ? undefined
+      : pagePlacements.find((p) => p.id === selectedId);
 
   // --- Carga del documento y rasterización del fondo (patrón #29) ---
   useEffect(() => {
@@ -185,25 +202,21 @@ export function SignaturePlacementCanvas({
     return pdfPointToCanvas(point, pageHeightPts, scale);
   }
 
-  /** Coordenadas PDF (y-arriba) de las 4 esquinas de la caja. */
-  function handlePositions(): { handle: SignatureHandle; point: PdfPoint }[] {
+  /** Coordenadas PDF (y-arriba) de las 4 esquinas de una caja. */
+  function handlePositions(
+    box: FreePlacement,
+  ): { handle: SignatureHandle; point: PdfPoint }[] {
     return [
-      { handle: "nw", point: { x: placement.x, y: placement.y + placement.height } },
-      {
-        handle: "ne",
-        point: {
-          x: placement.x + placement.width,
-          y: placement.y + placement.height,
-        },
-      },
-      { handle: "sw", point: { x: placement.x, y: placement.y } },
-      { handle: "se", point: { x: placement.x + placement.width, y: placement.y } },
+      { handle: "nw", point: { x: box.x, y: box.y + box.height } },
+      { handle: "ne", point: { x: box.x + box.width, y: box.y + box.height } },
+      { handle: "sw", point: { x: box.x, y: box.y } },
+      { handle: "se", point: { x: box.x + box.width, y: box.y } },
     ];
   }
 
-  function handleAt(pdf: PdfPoint): SignatureHandle | null {
+  function handleAt(box: FreePlacement, pdf: PdfPoint): SignatureHandle | null {
     const tolerance = HANDLE_HIT_PX / scale;
-    for (const { handle, point } of handlePositions()) {
+    for (const { handle, point } of handlePositions(box)) {
       if (Math.hypot(point.x - pdf.x, point.y - pdf.y) <= tolerance) {
         return handle;
       }
@@ -211,27 +224,42 @@ export function SignaturePlacementCanvas({
     return null;
   }
 
-  function insideBox(pdf: PdfPoint): boolean {
-    return (
-      pdf.x >= placement.x &&
-      pdf.x <= placement.x + placement.width &&
-      pdf.y >= placement.y &&
-      pdf.y <= placement.y + placement.height
-    );
-  }
-
   const strokeHandlers = usePointerStroke({
     onStart: (p: StrokePoint) => {
       const pdf = toPdf(p.x, p.y);
-      const handle = handleAt(pdf);
-      if (handle) {
-        gestureRef.current = { type: "resize", handle }; // (R13)
+      // Si hay una firma seleccionada y el puntero cae sobre uno de sus
+      // tiradores → redimensionar esa firma. (R18)
+      if (selected) {
+        const handle = handleAt(selected.box, pdf);
+        if (handle) {
+          gestureRef.current = {
+            type: "resize",
+            id: selected.id,
+            handle,
+            aspectRatio: selected.aspectRatio,
+          };
+          onGestureStart?.(); // (#37 R32)
+          return;
+        }
+      }
+      // Si no, resolver la firma bajo el puntero (topmost) y seleccionarla; el
+      // mismo gesto arranca el arrastre para moverla. (R16, R17)
+      const hitId = findSignatureAt(pagePlacements, pdf);
+      if (hitId !== null) {
+        onSelect(hitId);
+        const hit = pagePlacements.find((pl) => pl.id === hitId);
+        if (hit) {
+          gestureRef.current = {
+            type: "move",
+            id: hitId,
+            original: hit.box,
+            start: pdf,
+          };
+          onGestureStart?.(); // (#37 R32)
+        }
         return;
       }
-      if (insideBox(pdf)) {
-        gestureRef.current = { type: "move", original: placement, start: pdf }; // (R11, R12)
-        return;
-      }
+      onSelect(null);
       gestureRef.current = null;
     },
     onMove: (p: StrokePoint) => {
@@ -239,24 +267,37 @@ export function SignaturePlacementCanvas({
       const gesture = gestureRef.current;
       if (gesture?.type === "move") {
         onPlacementChange(
+          gesture.id,
           moveSignatureBox(
             gesture.original,
             pdf.x - gesture.start.x,
             pdf.y - gesture.start.y,
           ),
-        );
+        ); // (R17)
       } else if (gesture?.type === "resize") {
-        onPlacementChange(
-          resizeSignatureBox(placement, gesture.handle, pdf, aspectRatio, minSize),
-        );
+        const target = placements.find((pl) => pl.id === gesture.id);
+        if (target) {
+          onPlacementChange(
+            gesture.id,
+            resizeSignatureBox(
+              target.box,
+              gesture.handle,
+              pdf,
+              gesture.aspectRatio,
+              minSize,
+            ),
+          ); // (R18)
+        }
       }
     },
     onEnd: () => {
+      const gesture = gestureRef.current;
       gestureRef.current = null;
+      if (gesture?.type === "move" || gesture?.type === "resize") {
+        onGestureEnd?.(); // (#37 R32)
+      }
     },
   });
-
-  const boxTopLeft = toPx({ x: placement.x, y: placement.y + placement.height });
 
   return (
     <section
@@ -299,58 +340,77 @@ export function SignaturePlacementCanvas({
                     )}`}
                     className="pointer-events-none absolute inset-0"
                   >
-                    {signatureUrl ? (
-                      <image
-                        data-testid="signature-placement-image"
-                        href={signatureUrl}
-                        x={boxTopLeft.left}
-                        y={boxTopLeft.top}
-                        width={placement.width * scale}
-                        height={placement.height * scale}
-                      />
-                    ) : (
-                      <rect
-                        data-testid="signature-placement-box"
-                        x={boxTopLeft.left}
-                        y={boxTopLeft.top}
-                        width={placement.width * scale}
-                        height={placement.height * scale}
-                        fill="none"
-                        stroke="#1f9d55"
-                        strokeWidth={1.5}
-                        strokeDasharray="4 3"
-                      />
-                    )}
-                    {extras.map((extra) => {
-                      const at = toPx(extra.at);
+                    {pagePlacements.map((placement) => {
+                      const topLeft = toPx({
+                        x: placement.box.x,
+                        y: placement.box.y + placement.box.height,
+                      });
+                      const url = signatureUrls?.[placement.id] ?? null;
+                      const isSelected = placement.id === selectedId;
                       return (
-                        <text
-                          key={extra.id}
-                          data-testid="signature-placement-extra"
-                          x={at.left}
-                          y={at.top}
-                          fontSize={extra.fontSize * scale}
-                          fill="#111"
-                          style={{ fontFamily: "Helvetica, Arial, sans-serif" }}
-                        >
-                          {extra.text}
-                        </text>
-                      );
-                    })}
-                    {handlePositions().map(({ handle, point }) => {
-                      const px = toPx(point);
-                      return (
-                        <rect
-                          key={handle}
-                          data-testid={`signature-handle-${handle}`}
-                          x={px.left - HANDLE_SIZE_PX / 2}
-                          y={px.top - HANDLE_SIZE_PX / 2}
-                          width={HANDLE_SIZE_PX}
-                          height={HANDLE_SIZE_PX}
-                          fill="#ffffff"
-                          stroke="#1f9d55"
-                          strokeWidth={1.5}
-                        />
+                        <g key={placement.id}>
+                          {url ? (
+                            <image
+                              data-testid="signature-placement-image"
+                              data-signature-id={placement.id}
+                              href={url}
+                              x={topLeft.left}
+                              y={topLeft.top}
+                              width={placement.box.width * scale}
+                              height={placement.box.height * scale}
+                            />
+                          ) : (
+                            <rect
+                              data-testid="signature-placement-box"
+                              data-signature-id={placement.id}
+                              x={topLeft.left}
+                              y={topLeft.top}
+                              width={placement.box.width * scale}
+                              height={placement.box.height * scale}
+                              fill="none"
+                              stroke={isSelected ? "#1f9d55" : "#9ca3af"}
+                              strokeWidth={1.5}
+                              strokeDasharray="4 3"
+                            />
+                          )}
+                          {(placement.extras ?? []).map((extra) => {
+                            const at = toPx(extra.at);
+                            return (
+                              <text
+                                key={extra.id}
+                                data-testid="signature-placement-extra"
+                                x={at.left}
+                                y={at.top}
+                                fontSize={extra.fontSize * scale}
+                                fill="#111"
+                                style={{
+                                  fontFamily: "Helvetica, Arial, sans-serif",
+                                }}
+                              >
+                                {extra.text}
+                              </text>
+                            );
+                          })}
+                          {isSelected &&
+                            handlePositions(placement.box).map(
+                              ({ handle, point }) => {
+                                const px = toPx(point);
+                                return (
+                                  <rect
+                                    key={handle}
+                                    data-testid={`signature-handle-${handle}`}
+                                    x={px.left - HANDLE_SIZE_PX / 2}
+                                    y={px.top - HANDLE_SIZE_PX / 2}
+                                    width={HANDLE_SIZE_PX}
+                                    height={HANDLE_SIZE_PX}
+                                    fill="#ffffff"
+                                    stroke="#1f9d55"
+                                    strokeWidth={1.5}
+                                  />
+                                );
+                              },
+                            )}
+                        </g>
                       );
                     })}
                   </svg>

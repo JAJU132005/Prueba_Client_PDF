@@ -15,6 +15,24 @@ if (typeof Blob.prototype.arrayBuffer !== "function") {
   };
 }
 
+// jsdom (v24) no implementa `URL.createObjectURL`/`revokeObjectURL`, APIs
+// estándar del navegador que el código de producción usa para mostrar
+// miniaturas y vistas previas locales de archivos (imágenes/PDF) sin red. Se
+// stubean para que los tests de UI que no los mockean expresamente no fallen;
+// los tests que verifican la creación/revocación instalan sus propios espías
+// (que tienen prioridad al reasignarse en su `beforeEach`).
+if (typeof URL.createObjectURL !== "function") {
+  let objectUrlCounter = 0;
+  URL.createObjectURL = function (): string {
+    return `blob:jsdom-${objectUrlCounter++}`;
+  } as unknown as typeof URL.createObjectURL;
+}
+if (typeof URL.revokeObjectURL !== "function") {
+  URL.revokeObjectURL = function (): void {
+    // no-op en jsdom
+  } as unknown as typeof URL.revokeObjectURL;
+}
+
 // jsdom (v24) no implementa `PointerEvent`, por lo que `fireEvent.pointerDown`
 // crea un `Event` genérico que PIERDE `clientX/clientY` (llegan como NaN). Se
 // polifilla como subclase de `MouseEvent` (sí soportado por jsdom, ya usado por

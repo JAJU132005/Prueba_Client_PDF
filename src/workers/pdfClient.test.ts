@@ -17,7 +17,6 @@ import {
   PageNumbersFailedError,
   ProtectFailedError,
   RotateFailedError,
-  SignFailedError,
   SplitFailedError,
   WatermarkFailedError,
   type ProgressCallback,
@@ -29,7 +28,6 @@ import type {
   PdfWorkerApi,
   ProbeInput,
   ProbeResult,
-  SignOptions,
 } from "@/workers/contract";
 import { createPdfClient, isPdfWorkerError } from "@/workers/pdfClient";
 import { createPdfWorkerApi } from "@/workers/pdfWorkerApi";
@@ -107,9 +105,6 @@ describe("createPdfClient", () => {
       async annotate(): Promise<Uint8Array> {
         return new Uint8Array();
       },
-      async sign(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
       async detectForm(): Promise<FormModel> {
         return { hasFields: false, fields: [] };
       },
@@ -171,9 +166,6 @@ describe("createPdfClient — merge", () => {
         return new Uint8Array();
       },
       async annotate(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async sign(): Promise<Uint8Array> {
         return new Uint8Array();
       },
       async detectForm(): Promise<FormModel> {
@@ -259,9 +251,6 @@ describe("createPdfClient — split", () => {
         return new Uint8Array();
       },
       async annotate(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async sign(): Promise<Uint8Array> {
         return new Uint8Array();
       },
       async detectForm(): Promise<FormModel> {
@@ -359,9 +348,6 @@ describe("createPdfClient — rotate", () => {
         return new Uint8Array();
       },
       async annotate(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async sign(): Promise<Uint8Array> {
         return new Uint8Array();
       },
       async detectForm(): Promise<FormModel> {
@@ -464,9 +450,6 @@ describe("createPdfClient — organize", () => {
       async annotate(): Promise<Uint8Array> {
         return new Uint8Array();
       },
-      async sign(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
       async detectForm(): Promise<FormModel> {
         return { hasFields: false, fields: [] };
       },
@@ -562,9 +545,6 @@ describe("createPdfClient — imagesToPdf", () => {
         return new Uint8Array();
       },
       async annotate(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async sign(): Promise<Uint8Array> {
         return new Uint8Array();
       },
       async detectForm(): Promise<FormModel> {
@@ -672,9 +652,6 @@ describe("createPdfClient — addPageNumbers", () => {
         return new Uint8Array();
       },
       async annotate(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async sign(): Promise<Uint8Array> {
         return new Uint8Array();
       },
       async detectForm(): Promise<FormModel> {
@@ -811,9 +788,6 @@ describe("createPdfClient — addWatermark", () => {
       async annotate(): Promise<Uint8Array> {
         return new Uint8Array();
       },
-      async sign(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
       async detectForm(): Promise<FormModel> {
         return { hasFields: false, fields: [] };
       },
@@ -896,9 +870,6 @@ describe("createPdfClient — compress", () => {
         return new Uint8Array();
       },
       async annotate(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async sign(): Promise<Uint8Array> {
         return new Uint8Array();
       },
       async detectForm(): Promise<FormModel> {
@@ -997,9 +968,6 @@ describe("createPdfClient — protect", () => {
       async annotate(): Promise<Uint8Array> {
         return new Uint8Array();
       },
-      async sign(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
       async detectForm(): Promise<FormModel> {
         return { hasFields: false, fields: [] };
       },
@@ -1092,9 +1060,6 @@ describe("createPdfClient — annotate", () => {
         return new Uint8Array();
       },
       annotate,
-      async sign(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
       async detectForm(): Promise<FormModel> {
         return { hasFields: false, fields: [] };
       },
@@ -1160,108 +1125,6 @@ describe("createPdfClient — annotate", () => {
   });
 });
 
-describe("createPdfClient — sign", () => {
-  const baseOptions: SignOptions = {
-    pageIndex: 0,
-    position: "center",
-    widthPts: 50,
-    image: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
-  };
-
-  function clientWith(sign: PdfWorkerApi["sign"]) {
-    const api: PdfWorkerApi = {
-      async probe(input: ProbeInput): Promise<ProbeResult> {
-        return { sum: 0, count: input.values.length };
-      },
-      async merge(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async split(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async rotate(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async organize(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async imagesToPdf(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async addPageNumbers(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async addWatermark(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async compress(): Promise<CompressPdfResult> {
-        return emptyCompressResult();
-      },
-      async protect(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async annotate(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      sign,
-      async detectForm(): Promise<FormModel> {
-        return { hasFields: false, fields: [] };
-      },
-      async fillForms(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async ocr(): Promise<OcrResult> {
-        return { text: "" };
-      },
-      async redact(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-    };
-    return createPdfClient(api);
-  }
-
-  it("con API inyectada delega en sign con los bytes y las opciones (R11)", async () => {
-    let capturedInput: Uint8Array | undefined;
-    let capturedOptions: SignOptions | undefined;
-    const expected = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
-    const client = clientWith(async (input, options) => {
-      capturedInput = input;
-      capturedOptions = options;
-      return expected;
-    });
-    const result = await client.sign(new Uint8Array([1, 2]), baseOptions);
-    expect(capturedInput && Array.from(capturedInput)).toEqual([1, 2]);
-    expect(capturedOptions).toEqual(baseOptions);
-    expect(result).toEqual(expected);
-  });
-
-  it("reenvía el callback de progreso al sign (R11)", async () => {
-    const client = clientWith(async (_input, _options, onProgress) => {
-      onProgress?.(0);
-      onProgress?.(0.5);
-      onProgress?.(1);
-      return new Uint8Array([9]);
-    });
-    const progress: number[] = [];
-    const onProgress: ProgressCallback = (p) => progress.push(p);
-    await client.sign(new Uint8Array([0]), baseOptions, onProgress);
-    expect(progress).toEqual([0, 0.5, 1]);
-  });
-
-  it("preserva el name de SignFailedError al cruzar el cliente (R12)", async () => {
-    const client = clientWith(async () => {
-      throw new SignFailedError();
-    });
-    await expect(
-      client.sign(new Uint8Array([0]), baseOptions),
-    ).rejects.toMatchObject({ name: "SignFailedError" });
-  });
-
-  it("isPdfWorkerError reconoce SignFailedError (R12)", () => {
-    expect(isPdfWorkerError(new SignFailedError())).toBe(true);
-  });
-});
-
 describe("createPdfClient — detectForm / fillForms", () => {
   function clientWith(
     detectForm: PdfWorkerApi["detectForm"],
@@ -1299,9 +1162,6 @@ describe("createPdfClient — detectForm / fillForms", () => {
         return new Uint8Array();
       },
       async annotate(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async sign(): Promise<Uint8Array> {
         return new Uint8Array();
       },
       detectForm,
@@ -1419,9 +1279,6 @@ describe("createPdfClient — ocr", () => {
         return new Uint8Array();
       },
       async annotate(): Promise<Uint8Array> {
-        return new Uint8Array();
-      },
-      async sign(): Promise<Uint8Array> {
         return new Uint8Array();
       },
       async detectForm(): Promise<FormModel> {

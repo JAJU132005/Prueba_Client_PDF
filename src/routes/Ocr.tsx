@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { DownloadCta } from "@/components/DownloadCta";
 import { Dropzone } from "@/components/Dropzone";
 import { ErrorBubble } from "@/components/ErrorBubble";
 import { PageRangeSelector } from "@/components/PageRangeSelector";
@@ -64,7 +65,7 @@ const OUTPUT_LABELS: Record<OcrOutput, string> = {
 const OUTPUT_OPTIONS: readonly OcrOutput[] = ["text", "searchable-pdf", "both"];
 
 /** Mapea el `name` estable del error de dominio a un mensaje legible. (R36) */
-function messageForError(error: unknown): string {
+export function messageForError(error: unknown): string {
   if (isPdfWorkerError(error)) {
     switch (error.name) {
       case "InvalidPdfError":
@@ -353,13 +354,12 @@ export function Ocr(props?: OcrProps): JSX.Element {
               Descarga el resultado.
             </h3>
             <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleDownloadText}
-                className="btn btn-primary lv-pesada !px-6 !py-2 !text-xl"
-              >
-                Descargar texto
-              </button>
+              {/* Botón primario con la MISMA guía reutilizada (#39 R9, R12). */}
+              <DownloadCta
+                onDownload={handleDownloadText}
+                costLevel="heavy"
+                label="⇩ Descargar texto"
+              />
               {result.pdfBytes && (
                 <button
                   type="button"

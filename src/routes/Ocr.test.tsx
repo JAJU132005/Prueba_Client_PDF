@@ -136,9 +136,6 @@ function fakeClient(ocr: PdfClient["ocr"]): PdfClient {
     async annotate() {
       return new Uint8Array();
     },
-    async sign() {
-      return new Uint8Array();
-    },
     async detectForm() {
       return { hasFields: false, fields: [] };
     },
@@ -307,11 +304,17 @@ describe("Ocr — reconocimiento (R32, R33, R34, R35, R36)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reconocer texto" }));
 
     const textBtn = await screen.findByRole("button", {
-      name: "Descargar texto",
+      name: "⇩ Descargar texto",
     });
     const pdfBtn = screen.getByRole("button", {
       name: "Descargar PDF buscable",
     });
+
+    // El botón primario reutiliza la MISMA guía centralizada (#39 R9). El
+    // secundario "PDF buscable" sigue siendo un `.btn` normal.
+    expect(textBtn).toHaveAttribute("data-testid", "download-cta");
+    expect(textBtn).toHaveClass("download-cta");
+    expect(pdfBtn).not.toHaveClass("download-cta");
 
     fireEvent.click(textBtn);
     fireEvent.click(pdfBtn);
@@ -333,7 +336,7 @@ describe("Ocr — reconocimiento (R32, R33, R34, R35, R36)", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("No se pudo reconocer el texto");
     expect(
-      screen.queryByRole("button", { name: "Descargar texto" }),
+      screen.queryByRole("button", { name: "⇩ Descargar texto" }),
     ).not.toBeInTheDocument();
   });
 });

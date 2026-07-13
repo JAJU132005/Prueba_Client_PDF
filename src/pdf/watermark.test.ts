@@ -286,6 +286,58 @@ describe("addWatermark — imagen (R20, R22)", () => {
   });
 });
 
+/**
+ * Recorre `getOperatorList` de cada página de `bytes` y devuelve, por página, si
+ * contiene al menos una operación de pintado de imagen (`paintImageXObject` o su
+ * variante `paintInlineImageXObject`). Opera sobre bytes en memoria, sin red.
+ */
+async function pagesHaveImageXObject(bytes: Uint8Array): Promise<boolean[]> {
+  const pdf = await pdfjs.getDocument({
+    data: bytes,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+  }).promise;
+  const imageOps = new Set<number>(
+    [
+      pdfjs.OPS.paintImageXObject,
+      pdfjs.OPS.paintInlineImageXObject,
+      pdfjs.OPS.paintImageXObjectRepeat,
+    ].filter((op): op is number => typeof op === "number"),
+  );
+  const result: boolean[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const opList = await page.getOperatorList();
+    result.push(opList.fnArray.some((fn) => imageOps.has(fn)));
+  }
+  return result;
+}
+
+describe("addWatermark — imagen: XObject y ausencia de texto (#42 R2, R3)", () => {
+  it("cada página marcada contiene un XObject de imagen (#42 R3)", async () => {
+    const input = await makePdf(2);
+    const out = await addWatermark(
+      input,
+      opts({ mode: "image", image: PNG_2x3, pages: "all" }),
+    );
+    const perPage = await pagesHaveImageXObject(out);
+    expect(perPage).toHaveLength(2);
+    expect(perPage.every(Boolean)).toBe(true);
+  });
+
+  it("la salida en modo imagen NO contiene texto de marca extraíble (#42 R2)", async () => {
+    const input = await makePdf(2);
+    const out = await addWatermark(
+      input,
+      opts({ mode: "image", image: PNG_2x3, text: "CONFIDENCIAL", pages: "all" }),
+    );
+    const texts = await extractPageTexts(out);
+    for (const t of texts) {
+      expect(t).not.toContain("CONFIDENCIAL");
+    }
+  });
+});
+
 describe("addWatermark — bordes (R25–R34)", () => {
   it("rechaza con InvalidPdfError y sin bytes si la entrada no es un PDF (R25, R26)", async () => {
     await expect(

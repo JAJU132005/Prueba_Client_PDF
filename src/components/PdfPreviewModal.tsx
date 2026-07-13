@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { PreviewModal } from "@/components/PreviewModal";
 import { createPdfjsPageRasterizer } from "@/lib/pdfjsPageRasterizer";
 import {
   createViewerState,
@@ -11,10 +12,6 @@ import {
   type ViewerState,
 } from "@/pdf/previewViewer";
 import type { PageRasterizer, PageRasterizerFactory } from "@/pdf/rasterize";
-
-/** Selector de elementos enfocables para el focus trap. (R22) */
-const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export interface PdfPreviewModalProps {
   /** Archivo PDF a previsualizar; sus bytes se leen frescos al abrir. */
@@ -43,8 +40,6 @@ export function PdfPreviewModal({
   // Object URL vigente, en un ref para poder revocarla al sustituirla o cerrar
   // sin depender del ciclo de render de React. (R15)
   const imageUrlRef = useRef<string | null>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const currentPage = state?.currentPage;
   const scale = state?.scale;
@@ -140,47 +135,6 @@ export function PdfPreviewModal({
     };
   }, [currentPage, scale]);
 
-  // Trasladar el foco a un elemento dentro del visor al abrir. (R20)
-  useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
-
-  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
-    // Cerrar con Escape. (R21)
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
-      return;
-    }
-    // Focus trap: el foco no sale del contenedor con Tab/Shift+Tab. (R22)
-    if (event.key !== "Tab") {
-      return;
-    }
-    const container = dialogRef.current;
-    if (!container) {
-      return;
-    }
-    const focusables = Array.from(
-      container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-    );
-    if (focusables.length === 0) {
-      event.preventDefault();
-      return;
-    }
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const active = document.activeElement;
-    if (event.shiftKey) {
-      if (active === first || !container.contains(active)) {
-        event.preventDefault();
-        last.focus();
-      }
-    } else if (active === last || !container.contains(active)) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
   function handleNext(): void {
     setState((prev) => (prev ? nextPage(prev) : prev));
   }
@@ -200,117 +154,91 @@ export function PdfPreviewModal({
     setState((prev) => (prev ? zoomOut(prev) : prev));
   }
 
+  // El chrome accesible (overlay, role dialog, focus trap, Escape, botón de
+  // cierre, traslado de foco) lo aporta `PreviewModal`; aquí solo el cuerpo
+  // pdf-específico (navegación, zoom, render lazy). (R7)
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Vista previa de ${file.name}`}
-        tabIndex={-1}
-        onKeyDown={handleKeyDown}
-        onClick={(event) => event.stopPropagation()}
-        className="card flex max-h-full w-full max-w-4xl flex-col gap-4 motion-reduce:transition-none"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="hand truncate text-2xl text-ink">
-            {file.name}
-          </h2>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar vista previa"
-            className="hand px-2 py-1 text-lg text-mk-red"
-          >
-            ✕
-          </button>
+    <PreviewModal label={file.name} onClose={onClose}>
+      {error && (
+        <div
+          role="alert"
+          className="hand rounded-scrap border-[2.5px] border-mk-red p-4 text-[17px] text-mk-red"
+        >
+          {error}
         </div>
+      )}
 
-        {error && (
-          <div
-            role="alert"
-            className="hand rounded-scrap border-[2.5px] border-mk-red p-4 text-[17px] text-mk-red"
-          >
-            {error}
+      {!error && state && (
+        <>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrev}
+              disabled={state.currentPage <= 1}
+              aria-label="Página anterior"
+              className="btn !px-3 !py-1 !text-base"
+            >
+              ‹
+            </button>
+            <span className="mono soft text-sm" aria-live="polite">
+              {state.currentPage} de {state.pageCount}
+            </span>
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={state.currentPage >= state.pageCount}
+              aria-label="Página siguiente"
+              className="btn !px-3 !py-1 !text-base"
+            >
+              ›
+            </button>
+            <label className="hand ml-2 flex items-center gap-2 text-base text-ink-soft">
+              Ir a
+              <input
+                type="number"
+                min={1}
+                max={state.pageCount}
+                value={state.currentPage}
+                onChange={(event) =>
+                  handleGoTo(Number.parseInt(event.target.value, 10))
+                }
+                aria-label="Ir a la página"
+                className="hand w-16 border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1 text-base text-ink outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              aria-label="Reducir zoom"
+              className="btn ml-2 !px-3 !py-1 !text-base"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              aria-label="Aumentar zoom"
+              className="btn !px-3 !py-1 !text-base"
+            >
+              +
+            </button>
           </div>
-        )}
 
-        {!error && state && (
-          <>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={handlePrev}
-                disabled={state.currentPage <= 1}
-                aria-label="Página anterior"
-                className="btn !px-3 !py-1 !text-base"
-              >
-                ‹
-              </button>
-              <span className="mono soft text-sm" aria-live="polite">
-                {state.currentPage} de {state.pageCount}
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded border-[2.5px] border-ink bg-surface p-2 shadow-doodle">
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt={`Página ${state.currentPage} de ${file.name}`}
+                className="max-h-full max-w-full object-contain"
+              />
+            ) : (
+              <span className="hand soft text-base" aria-live="polite">
+                Cargando página…
               </span>
-              <button
-                type="button"
-                onClick={handleNext}
-                disabled={state.currentPage >= state.pageCount}
-                aria-label="Página siguiente"
-                className="btn !px-3 !py-1 !text-base"
-              >
-                ›
-              </button>
-              <label className="hand ml-2 flex items-center gap-2 text-base text-ink-soft">
-                Ir a
-                <input
-                  type="number"
-                  min={1}
-                  max={state.pageCount}
-                  value={state.currentPage}
-                  onChange={(event) =>
-                    handleGoTo(Number.parseInt(event.target.value, 10))
-                  }
-                  aria-label="Ir a la página"
-                  className="hand w-16 border-0 border-b-[2.5px] border-dashed border-ink bg-paper px-2 py-1 text-base text-ink outline-none"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={handleZoomOut}
-                aria-label="Reducir zoom"
-                className="btn ml-2 !px-3 !py-1 !text-base"
-              >
-                −
-              </button>
-              <button
-                type="button"
-                onClick={handleZoomIn}
-                aria-label="Aumentar zoom"
-                className="btn !px-3 !py-1 !text-base"
-              >
-                +
-              </button>
-            </div>
-
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded border-[2.5px] border-ink bg-white p-2 shadow-doodle">
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt={`Página ${state.currentPage} de ${file.name}`}
-                  className="max-h-full max-w-full object-contain"
-                />
-              ) : (
-                <span className="hand soft text-base" aria-live="polite">
-                  Cargando página…
-                </span>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+            )}
+          </div>
+        </>
+      )}
+    </PreviewModal>
   );
 }

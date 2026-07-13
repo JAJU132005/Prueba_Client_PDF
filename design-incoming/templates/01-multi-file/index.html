@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plantilla 01-multi-file — Unir PDF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Gochi+Hand&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens/tokens.css">
+<script src="../../shared/panda-art.js" defer></script>
+<script src="../../shared/panda-widget.js" defer></script>
+<style>
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+  .estado { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); letter-spacing: .08em; text-transform: uppercase; margin: 40px 0 10px; }
+</style>
+</head>
+<body>
+
+<header class="wrap" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:20px">
+  <a class="hand" href="../../home/index.html" style="font-size:19px;color:var(--ink);text-decoration:none;box-shadow:inset 0 -8px 0 var(--hl-green)">← volver al cuaderno</a>
+  <div style="flex:1"></div>
+  <span class="badge lv-ligera">✓ 100% local</span>
+</header>
+
+<main class="wrap" style="padding-bottom:40px">
+  <p class="mono soft" style="margin:24px 0 0;font-size:12px">PLANTILLA 01-MULTI-FILE · varios archivos → una salida · herramientas: Unir PDF (/merge), Imágenes a PDF (/images-to-pdf)</p>
+
+  <!-- Cabecera de herramienta -->
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px">
+    <span class="tool-icon scrawl" style="font-size:24px;display:grid;place-items:center;width:56px;height:56px;border:2.5px dashed var(--ink);border-radius:60% 40% 55% 45%/45% 55% 40% 60%;background:var(--hl-green)">＋</span>
+    <h1 class="hand" style="margin:0;font-size:clamp(32px,4vw,46px)"><span class="hl-ligera">Unir PDF</span></h1>
+    <span class="badge lv-ligera">Ligera · Pan comido</span>
+  </div>
+  <div style="margin-top:6px;display:flex;align-items:center;gap:12px">
+    <panda-art kind="pose-ligera" style="width:72px"></panda-art>
+    <p class="hand soft" style="margin:0;font-size:17px">Tu dispositivo ni se despeina.</p>
+  </div>
+
+  <!-- Escena: la grapadora gigante -->
+  <div class="card" style="margin-top:22px;max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-ligera">La grapadora gigante</span> <span class="scrawl soft" style="font-size:20px">¡CLACK!</span></h2>
+    <panda-art kind="unir" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+  </div>
+
+  <p class="estado">estado 1 · dropzone vacía (Dropzone multi)</p>
+  <div class="dropzone">
+    <span class="tape" style="left:70px;transform:rotate(-5deg)"></span>
+    <p class="hand" style="margin:0;font-size:24px">Arrastra tus PDF aquí — ¡prometo no chismosear!</p>
+    <p class="mono soft" style="margin:6px 0 14px;font-size:12px">nunca sale de tu dispositivo · validación y límites: los de siempre</p>
+    <button class="btn" type="button">…o elige archivos</button>
+  </div>
+
+  <p class="estado">estado 2 · FileList reordenable (hojas apiladas en la mesa del panda)</p>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div class="filerow" style="transform:rotate(-.5deg)">
+      <span class="scrawl">🗎</span><span class="hand" style="font-size:19px">apuntes-de-clase.pdf</span>
+      <span class="mono soft" style="font-size:12px">1,3 MB · 12 páginas</span><span style="flex:1"></span>
+      <button class="btn" type="button" aria-label="Subir en la pila" style="width:32px;height:32px;padding:0;border-radius:50% 45% 55% 50%">↑</button>
+      <button class="btn" type="button" aria-label="Bajar en la pila" style="width:32px;height:32px;padding:0;border-radius:45% 55% 50% 50%">↓</button>
+      <button class="btn" type="button" style="font-size:16px;padding:3px 12px">Vista previa</button>
+      <button type="button" aria-label="Quitar archivo" style="background:none;border:none;cursor:pointer;color:var(--mk-red);font-family:var(--font-display);font-size:18px">✕</button>
+    </div>
+    <div class="filerow" style="transform:rotate(.6deg)">
+      <span class="scrawl">🗎</span><span class="hand" style="font-size:19px">contrato-final-FINAL(2).pdf</span>
+      <span class="mono soft" style="font-size:12px">4,7 MB · 9 páginas</span><span style="flex:1"></span>
+      <button class="btn" type="button" aria-label="Subir en la pila" style="width:32px;height:32px;padding:0;border-radius:50% 45% 55% 50%">↑</button>
+      <button class="btn" type="button" aria-label="Bajar en la pila" style="width:32px;height:32px;padding:0;border-radius:45% 55% 50% 50%">↓</button>
+      <button class="btn" type="button" style="font-size:16px;padding:3px 12px">Vista previa</button>
+      <button type="button" aria-label="Quitar archivo" style="background:none;border:none;cursor:pointer;color:var(--mk-red);font-family:var(--font-display);font-size:18px">✕</button>
+    </div>
+  </div>
+
+  <p class="estado">estado 3 · acción</p>
+  <button class="btn btn-primary lv-ligera" type="button">Unir con la grapadora</button>
+
+  <p class="estado">estado 4 · procesando (ProgressBar = bambú con el 0..1 real del worker)</p>
+  <div style="max-width:640px">
+    <p class="hand" style="margin:0 0 10px;font-size:21px">El panda alinea tus hojas y aprieta la grapadora… <span class="scrawl soft">¡CLACK!</span></p>
+    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62">
+      <div class="progress-fill" style="width:62%"></div>
+      <span class="progress-label">62% · rama de bambú llenándose</span>
+    </div>
+  </div>
+
+  <p class="estado">estado 5 · ResultPanel (trituradora + sello + descarga)</p>
+  <div style="display:flex;gap:24px;flex-wrap:wrap">
+    <div class="card" style="flex:1 1 320px;min-width:280px">
+      <h3 class="hand" style="margin:0;font-size:26px"><span class="hl-ligera">¡Listo!</span> Hojas grapadas.</h3>
+      <panda-art kind="trituradora" style="width:min(270px,100%);margin:10px auto 0"></panda-art>
+      <p class="hand" style="margin:10px 0 0;font-size:18px">borrado hasta de mi memoria 🤝</p>
+    </div>
+    <div style="flex:0 1 260px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+      <div style="position:relative;width:170px;aspect-ratio:3/4;background:#fff;border:2.5px solid var(--ink);border-radius:4px;box-shadow:4px 5px 0 var(--shadow)">
+        <span class="stamp-topsecret" style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%) rotate(-14deg)">TOP SECRET</span>
+        <span class="mono" style="position:absolute;left:10px;right:10px;bottom:12px;font-size:10px;color:#8a857b">unido-resultado.pdf</span>
+      </div>
+      <button class="btn btn-primary lv-ligera" type="button" style="font-size:20px;padding:9px 26px">⇩ Descargar resultado</button>
+      <button class="btn btn-ghost" type="button">procesar otro</button>
+    </div>
+  </div>
+
+  <!-- Variante de plantilla -->
+  <p class="estado">variante · Imágenes a PDF (/images-to-pdf) — misma anatomía</p>
+  <div class="card" style="max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-ligera">Álbum de recortes</span> <span class="scrawl soft" style="font-size:20px">¡ZAS!</span></h2>
+    <panda-art kind="imagenes-a-pdf" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+    <ul class="hand" style="margin:12px 0 0;font-size:17px;line-height:1.6;padding-left:22px">
+      <li>Dropzone acepta imágenes; cada una aparece como foto pegada con cinta en el cuaderno.</li>
+      <li>Reordenar = despegar y re-pegar la foto (mismas flechas del FileList).</li>
+      <li>Botón de acción: «Cerrar el álbum con moño».</li>
+      <li>Imagen corrupta → foto con panda confundido + mensaje real de error en bocadillo (sin reescribirlo).</li>
+    </ul>
+  </div>
+
+  <!-- Notas -->
+  <p class="estado">notas para el implementer</p>
+  <div class="postit" style="max-width:560px;transform:rotate(-1deg)">
+    Compartidos que embebe: Dropzone(multi), FileList (+PageCountBadge «N páginas»), PreviewModal, ProgressBar, ResultPanel.
+    La acción llama a `merge` / `imagesToPdf` existentes; el bambú consume el progreso del worker tal cual.
+  </div>
+</main>
+
+<panda-widget></panda-widget>
+</body>
+</html>

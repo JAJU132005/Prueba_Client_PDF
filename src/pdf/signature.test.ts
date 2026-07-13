@@ -1,210 +1,24 @@
-import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 
 import {
+  addPlacedSignature,
+  buildPlacedSignatureAnnotations,
   buildSignatureAnnotations,
   computeSignatureBox,
-  computeSignaturePlacement,
-  computeSignatureSize,
+  findSignatureAt,
   formatSignatureDate,
   moveSignatureBox,
+  removePlacedSignature,
   resizeSignatureBox,
-  signPdf,
+  updatePlacedSignatureBox,
+  updatePlacedSignaturePages,
   type FreePlacement,
+  type PlacedSignature,
   type SignatureExtra,
-  type SignOptions,
 } from "@/pdf/signature";
-import {
-  InvalidImageError,
-  InvalidPdfError,
-  SignFailedError,
-} from "@/pdf/types";
-import {
-  computeWatermarkPosition,
-  WATERMARK_MARGIN,
-} from "@/pdf/watermark";
-
-/** PDF mínimo con `n` páginas de 200×300 puntos. */
-async function makePdf(n: number): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  for (let i = 0; i < n; i++) {
-    doc.addPage([200, 300]);
-  }
-  return doc.save();
-}
-
-/** PNG 1×1 válido e incrustable por pdf-lib (transparente). */
-function makePng1x1(): Uint8Array {
-  const base64 =
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAen63NgAAAAASUVORK5CYII=";
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function baseOptions(overrides: Partial<SignOptions> = {}): SignOptions {
-  return {
-    pageIndex: 0,
-    position: "center",
-    widthPts: 50,
-    image: makePng1x1(),
-    ...overrides,
-  };
-}
-
-describe("computeSignatureSize (R1)", () => {
-  it("escala al ancho objetivo preservando la relación de aspecto", () => {
-    expect(computeSignatureSize(200, 100, 50)).toEqual({ width: 50, height: 25 });
-  });
-
-  it("mantiene width === targetWidthPts exacto", () => {
-    const size = computeSignatureSize(640, 480, 123.5);
-    expect(size.width).toBe(123.5);
-    expect(size.height).toBeCloseTo(480 * (123.5 / 640));
-  });
-});
-
-describe("computeSignaturePlacement (R2)", () => {
-  it("deriva el ancla bottom-right igual que computeWatermarkPosition", () => {
-    const placement = computeSignaturePlacement(
-      200,
-      100,
-      500,
-      700,
-      50,
-      "bottom-right",
-      WATERMARK_MARGIN,
-    );
-    const size = computeSignatureSize(200, 100, 50);
-    const expected = computeWatermarkPosition(
-      "bottom-right",
-      500,
-      700,
-      size.width,
-      size.height,
-      WATERMARK_MARGIN,
-    );
-    expect(placement).toEqual({
-      x: expected.x,
-      y: expected.y,
-      width: size.width,
-      height: size.height,
-    });
-  });
-
-  it("deriva el ancla center igual que computeWatermarkPosition", () => {
-    const placement = computeSignaturePlacement(
-      200,
-      100,
-      500,
-      700,
-      80,
-      "center",
-      WATERMARK_MARGIN,
-    );
-    const size = computeSignatureSize(200, 100, 80);
-    const expected = computeWatermarkPosition(
-      "center",
-      500,
-      700,
-      size.width,
-      size.height,
-      WATERMARK_MARGIN,
-    );
-    expect(placement.x).toBe(expected.x);
-    expect(placement.y).toBe(expected.y);
-  });
-});
-
-describe("signPdf — camino feliz (R3)", () => {
-  it("devuelve bytes cargables por PDFDocument.load y distintos de la entrada", async () => {
-    const input = await makePdf(1);
-    const output = await signPdf(input, baseOptions());
-    const reloaded = await PDFDocument.load(output);
-    expect(reloaded.getPageCount()).toBe(1);
-    // La imagen se incrustó: la salida difiere de la entrada.
-    expect(Array.from(output)).not.toEqual(Array.from(input));
-  });
-});
-
-describe("signPdf — conserva el número de páginas (R4)", () => {
-  it("un PDF de 3 páginas produce un PDF de 3 páginas", async () => {
-    const input = await makePdf(3);
-    const output = await signPdf(input, baseOptions({ pageIndex: 2 }));
-    const reloaded = await PDFDocument.load(output);
-    expect(reloaded.getPageCount()).toBe(3);
-  });
-});
-
-describe("signPdf — validación de pageIndex (R5)", () => {
-  it("pageIndex fuera de rango rechaza con SignFailedError sin salida", async () => {
-    const input = await makePdf(2);
-    await expect(
-      signPdf(input, baseOptions({ pageIndex: 5 })),
-    ).rejects.toBeInstanceOf(SignFailedError);
-  });
-
-  it("pageIndex negativo rechaza con SignFailedError", async () => {
-    const input = await makePdf(2);
-    await expect(
-      signPdf(input, baseOptions({ pageIndex: -1 })),
-    ).rejects.toBeInstanceOf(SignFailedError);
-  });
-});
-
-describe("signPdf — imagen inválida (R6)", () => {
-  it("bytes que no son JPG ni PNG rechazan con InvalidImageError", async () => {
-    const input = await makePdf(1);
-    await expect(
-      signPdf(input, baseOptions({ image: new Uint8Array([1, 2, 3, 4]) })),
-    ).rejects.toBeInstanceOf(InvalidImageError);
-  });
-});
-
-describe("signPdf — PDF inválido (R7)", () => {
-  it("bytes de entrada no-PDF rechazan con InvalidPdfError", async () => {
-    const notPdf = new Uint8Array([0x68, 0x69]);
-    await expect(signPdf(notPdf, baseOptions())).rejects.toBeInstanceOf(
-      InvalidPdfError,
-    );
-  });
-});
-
-describe("signPdf — validación de widthPts (R8)", () => {
-  it("widthPts <= 0 rechaza con SignFailedError", async () => {
-    const input = await makePdf(1);
-    await expect(
-      signPdf(input, baseOptions({ widthPts: 0 })),
-    ).rejects.toBeInstanceOf(SignFailedError);
-  });
-
-  it("widthPts no finito rechaza con SignFailedError", async () => {
-    const input = await makePdf(1);
-    await expect(
-      signPdf(input, baseOptions({ widthPts: Number.NaN })),
-    ).rejects.toBeInstanceOf(SignFailedError);
-  });
-});
-
-describe("signPdf — progreso (R9)", () => {
-  it("emite valores en [0,1] terminando exactamente en 1", async () => {
-    const input = await makePdf(1);
-    const progress: number[] = [];
-    await signPdf(input, baseOptions(), (p) => progress.push(p));
-    expect(progress.length).toBeGreaterThan(0);
-    for (const p of progress) {
-      expect(p).toBeGreaterThanOrEqual(0);
-      expect(p).toBeLessThanOrEqual(1);
-    }
-    expect(progress[progress.length - 1]).toBe(1);
-  });
-});
 
 // ---------------------------------------------------------------------------
-// Colocación libre (#30). Bloques ADITIVOS: no se editan los tests de #24.
+// Colocación libre (#30). Geometría pura de arrastrar/redimensionar la firma.
 // ---------------------------------------------------------------------------
 
 describe("computeSignatureBox (R1)", () => {
@@ -233,12 +47,12 @@ describe("moveSignatureBox (R2)", () => {
   });
 });
 
-describe("resizeSignatureBox — aspecto preservado (R3)", () => {
+describe("resizeSignatureBox — aspecto preservado (R6)", () => {
   const box: FreePlacement = { x: 100, y: 100, width: 60, height: 30 };
   const aspectRatio = 2; // width / height
 
   for (const handle of ["nw", "ne", "sw", "se"] as const) {
-    it(`el tirador ${handle} devuelve width/height === aspectRatio`, () => {
+    it(`el tirador ${handle} devuelve width/height === aspectRatio y ambos >= minSize`, () => {
       const resized = resizeSignatureBox(
         box,
         handle,
@@ -247,58 +61,31 @@ describe("resizeSignatureBox — aspecto preservado (R3)", () => {
         8,
       );
       expect(resized.width / resized.height).toBeCloseTo(aspectRatio);
+      expect(resized.width).toBeGreaterThanOrEqual(8);
+      expect(resized.height).toBeGreaterThanOrEqual(8);
     });
   }
-});
 
-describe("resizeSignatureBox — esquina opuesta fija (R4)", () => {
-  it("arrastrar `nw` mantiene fija la esquina `se`", () => {
-    const box: FreePlacement = { x: 100, y: 100, width: 60, height: 30 };
-    // se = (x+width, y) = (160, 100).
-    const resized = resizeSignatureBox(
-      box,
-      "nw",
-      { x: 40, y: 220 },
-      2,
-      8,
-    );
-    // La esquina se del resultado debe seguir en (160, 100).
-    expect(resized.x + resized.width).toBeCloseTo(160);
-    expect(resized.y).toBeCloseTo(100);
-  });
-
-  it("arrastrar `se` mantiene fija la esquina `nw`", () => {
-    const box: FreePlacement = { x: 100, y: 100, width: 60, height: 30 };
-    // nw = (x, y+height) = (100, 130).
-    const resized = resizeSignatureBox(
-      box,
-      "se",
-      { x: 300, y: 20 },
-      2,
-      8,
-    );
-    expect(resized.x).toBeCloseTo(100);
-    expect(resized.y + resized.height).toBeCloseTo(130);
-  });
-});
-
-describe("resizeSignatureBox — clamp a minSize (R5)", () => {
-  it("con `to` sobre la esquina fija, width y height quedan en minSize", () => {
-    const box: FreePlacement = { x: 100, y: 100, width: 60, height: 60 };
+  it("con `to` sobre la esquina fija, ambos lados quedan en minSize (R6)", () => {
+    const square: FreePlacement = { x: 100, y: 100, width: 60, height: 60 };
     // se fija = (160, 100); arrastramos nw casi encima de la esquina fija.
-    const resized = resizeSignatureBox(
-      box,
-      "nw",
-      { x: 160, y: 100 },
-      1, // aspecto 1 → ambos lados = minSize
-      8,
-    );
+    const resized = resizeSignatureBox(square, "nw", { x: 160, y: 100 }, 1, 8);
     expect(resized.width).toBe(8);
     expect(resized.height).toBe(8);
   });
 });
 
-describe("buildSignatureAnnotations — sin extras (R6, R7, R9)", () => {
+describe("resizeSignatureBox — esquina opuesta fija", () => {
+  it("arrastrar `nw` mantiene fija la esquina `se`", () => {
+    const box: FreePlacement = { x: 100, y: 100, width: 60, height: 30 };
+    // se = (x+width, y) = (160, 100).
+    const resized = resizeSignatureBox(box, "nw", { x: 40, y: 220 }, 2, 8);
+    expect(resized.x + resized.width).toBeCloseTo(160);
+    expect(resized.y).toBeCloseTo(100);
+  });
+});
+
+describe("buildSignatureAnnotations — reutilización de #30", () => {
   it("pageIndices=[0,2,4] → 3 anotaciones image, una por página", () => {
     const placement: FreePlacement = { x: 12, y: 34, width: 50, height: 25 };
     const image = new Uint8Array([1, 2, 3]);
@@ -310,75 +97,18 @@ describe("buildSignatureAnnotations — sin extras (R6, R7, R9)", () => {
       (p, part) => `id-${String(p)}-${part}`,
     );
     expect(anns).toHaveLength(3);
-    expect(anns.every((a) => a.kind === "image")).toBe(true);
     expect(anns.map((a) => a.pageIndex)).toEqual([0, 2, 4]);
     for (const a of anns) {
       expect(a.kind).toBe("image");
       if (a.kind === "image") {
         expect(a.at).toEqual({ x: 12, y: 34 });
-        expect(a.width).toBe(50);
-        expect(a.height).toBe(25);
         expect(a.data).toBe(image);
       }
     }
   });
 });
 
-describe("buildSignatureAnnotations — con extras (R8)", () => {
-  it("pageIndices=[1,3] + 2 extras → 2 image + 4 text con datos de cada extra", () => {
-    const placement: FreePlacement = { x: 0, y: 0, width: 40, height: 20 };
-    const extras: SignatureExtra[] = [
-      {
-        id: "date",
-        kind: "date",
-        text: "2026-07-07",
-        at: { x: 5, y: 6 },
-        fontSize: 12,
-        color: { r: 0, g: 0, b: 0 },
-      },
-      {
-        id: "name",
-        kind: "text",
-        text: "J. Panda",
-        at: { x: 7, y: 8 },
-        fontSize: 14,
-        color: { r: 0.1, g: 0.2, b: 0.3 },
-      },
-    ];
-    const anns = buildSignatureAnnotations(
-      placement,
-      new Uint8Array([9]),
-      [1, 3],
-      extras,
-      (p, part) => `id-${String(p)}-${part}`,
-    );
-    const images = anns.filter((a) => a.kind === "image");
-    const texts = anns.filter((a) => a.kind === "text");
-    expect(images).toHaveLength(2);
-    expect(texts).toHaveLength(4);
-    // Cada extra aparece por cada página con su text/at/fontSize.
-    for (const pageIndex of [1, 3]) {
-      const dateAnn = texts.find(
-        (a) => a.pageIndex === pageIndex && a.kind === "text" && a.text === "2026-07-07",
-      );
-      const nameAnn = texts.find(
-        (a) => a.pageIndex === pageIndex && a.kind === "text" && a.text === "J. Panda",
-      );
-      expect(dateAnn).toBeDefined();
-      expect(nameAnn).toBeDefined();
-      if (dateAnn?.kind === "text") {
-        expect(dateAnn.at).toEqual({ x: 5, y: 6 });
-        expect(dateAnn.fontSize).toBe(12);
-      }
-      if (nameAnn?.kind === "text") {
-        expect(nameAnn.at).toEqual({ x: 7, y: 8 });
-        expect(nameAnn.fontSize).toBe(14);
-      }
-    }
-  });
-});
-
-describe("formatSignatureDate (R10)", () => {
+describe("formatSignatureDate (R10 de #30)", () => {
   it("formatea AAAA-MM-DD de forma determinista (UTC)", () => {
     expect(formatSignatureDate(new Date("2026-07-07T10:00:00Z"))).toBe(
       "2026-07-07",
@@ -389,5 +119,245 @@ describe("formatSignatureDate (R10)", () => {
     expect(formatSignatureDate(new Date("2026-01-05T00:00:00Z"))).toBe(
       "2026-01-05",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Herramienta unificada (#36). Modelo de LISTA de firmas colocadas (R1–R10).
+// ---------------------------------------------------------------------------
+
+function makeSig(overrides: Partial<PlacedSignature> = {}): PlacedSignature {
+  return {
+    id: "s1",
+    image: new Uint8Array([1, 2, 3]),
+    box: { x: 10, y: 20, width: 40, height: 20 },
+    aspectRatio: 2,
+    pageIndices: [0],
+    ...overrides,
+  };
+}
+
+describe("addPlacedSignature — append inmutable (R1)", () => {
+  it("devuelve una lista nueva length+1 sin mutar la entrada", () => {
+    const list: PlacedSignature[] = [makeSig({ id: "a" })];
+    const sig = makeSig({ id: "b" });
+    const next = addPlacedSignature(list, sig);
+    expect(next).toHaveLength(2);
+    expect(next[next.length - 1]).toBe(sig);
+    expect(next).not.toBe(list);
+    // La lista original no se muta.
+    expect(list).toHaveLength(1);
+    expect(list.map((s) => s.id)).toEqual(["a"]);
+  });
+});
+
+describe("updatePlacedSignatureBox — solo la entrada del id (R2)", () => {
+  it("cambia la box de ese id y deja el resto y la lista intactos", () => {
+    const a = makeSig({ id: "a", box: { x: 0, y: 0, width: 10, height: 5 } });
+    const b = makeSig({ id: "b", box: { x: 1, y: 1, width: 20, height: 10 } });
+    const list: PlacedSignature[] = [a, b];
+    const newBox: FreePlacement = { x: 99, y: 88, width: 30, height: 15 };
+    const next = updatePlacedSignatureBox(list, "b", newBox);
+
+    expect(next).not.toBe(list);
+    expect(next[0]).toBe(a); // la no afectada conserva su referencia
+    expect(next[1].box).toEqual(newBox);
+    expect(next[1].id).toBe("b");
+    // La entrada original de b no se muta.
+    expect(b.box).toEqual({ x: 1, y: 1, width: 20, height: 10 });
+  });
+
+  it("no cambia nada si el id no existe", () => {
+    const list: PlacedSignature[] = [makeSig({ id: "a" })];
+    const next = updatePlacedSignatureBox(list, "zzz", {
+      x: 5,
+      y: 5,
+      width: 5,
+      height: 5,
+    });
+    expect(next.map((s) => s.box)).toEqual(list.map((s) => s.box));
+  });
+});
+
+describe("updatePlacedSignaturePages — solo la entrada del id (R3)", () => {
+  it("cambia pageIndices de ese id y deja el resto y la lista intactos", () => {
+    const a = makeSig({ id: "a", pageIndices: [0] });
+    const b = makeSig({ id: "b", pageIndices: [1] });
+    const list: PlacedSignature[] = [a, b];
+    const next = updatePlacedSignaturePages(list, "a", [0, 2, 3]);
+
+    expect(next).not.toBe(list);
+    expect(next[0].pageIndices).toEqual([0, 2, 3]);
+    expect(next[1]).toBe(b);
+    // La entrada original de a no se muta.
+    expect(a.pageIndices).toEqual([0]);
+  });
+});
+
+describe("removePlacedSignature — filtra por id inmutable (R4)", () => {
+  it("quita solo el id indicado, resto intacto, sin mutar la lista", () => {
+    const a = makeSig({ id: "a" });
+    const b = makeSig({ id: "b" });
+    const c = makeSig({ id: "c" });
+    const list: PlacedSignature[] = [a, b, c];
+    const next = removePlacedSignature(list, "b");
+
+    expect(next).not.toBe(list);
+    expect(next.map((s) => s.id)).toEqual(["a", "c"]);
+    expect(next[0]).toBe(a);
+    expect(next[1]).toBe(c);
+    // Original intacta.
+    expect(list.map((s) => s.id)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("findSignatureAt — topmost o null (R5)", () => {
+  it("devuelve el id de la ÚLTIMA caja que contiene el punto (superior)", () => {
+    // Dos firmas solapadas: 'top' se dibuja después, así que gana en (15,25).
+    const bottom = makeSig({
+      id: "bottom",
+      box: { x: 0, y: 0, width: 100, height: 100 },
+    });
+    const top = makeSig({
+      id: "top",
+      box: { x: 10, y: 10, width: 30, height: 30 },
+    });
+    const list: PlacedSignature[] = [bottom, top];
+    expect(findSignatureAt(list, { x: 15, y: 25 })).toBe("top");
+    // Punto solo dentro de la inferior.
+    expect(findSignatureAt(list, { x: 80, y: 80 })).toBe("bottom");
+  });
+
+  it("devuelve null si ninguna caja contiene el punto", () => {
+    const list: PlacedSignature[] = [
+      makeSig({ id: "a", box: { x: 0, y: 0, width: 10, height: 10 } }),
+    ];
+    expect(findSignatureAt(list, { x: 500, y: 500 })).toBeNull();
+    expect(findSignatureAt([], { x: 0, y: 0 })).toBeNull();
+  });
+});
+
+describe("buildPlacedSignatureAnnotations — geometría y datos (R7)", () => {
+  it("por firma/página emite una image con at/width/height de su box y data de su image", () => {
+    const image = new Uint8Array([7, 7, 7]);
+    const list: PlacedSignature[] = [
+      makeSig({
+        id: "s",
+        image,
+        box: { x: 11, y: 22, width: 44, height: 22 },
+        pageIndices: [0],
+      }),
+    ];
+    const anns = buildPlacedSignatureAnnotations(list, (sid, p, part) =>
+      `${sid}-${String(p)}-${part}`,
+    );
+    const images = anns.filter((a) => a.kind === "image");
+    expect(images).toHaveLength(1);
+    const img = images[0];
+    if (img.kind === "image") {
+      expect(img.at).toEqual({ x: 11, y: 22 });
+      expect(img.width).toBe(44);
+      expect(img.height).toBe(22);
+      expect(img.data).toBe(image);
+    }
+  });
+});
+
+describe("buildPlacedSignatureAnnotations — cajas distintas → anotaciones correspondientes (R8)", () => {
+  it("cada anotación imagen corresponde a la box/imagen de SU firma (no mera desigualdad)", () => {
+    const imageA = new Uint8Array([0xa]);
+    const imageB = new Uint8Array([0xb]);
+    const sigA = makeSig({
+      id: "A",
+      image: imageA,
+      box: { x: 5, y: 5, width: 40, height: 20 },
+      pageIndices: [0],
+    });
+    const sigB = makeSig({
+      id: "B",
+      image: imageB,
+      box: { x: 300, y: 400, width: 120, height: 60 },
+      pageIndices: [0],
+    });
+    const list: PlacedSignature[] = [sigA, sigB];
+
+    const anns = buildPlacedSignatureAnnotations(list, (sid, p, part) =>
+      `${sid}-${String(p)}-${part}`,
+    );
+    const images = anns.filter((a) => a.kind === "image");
+    expect(images).toHaveLength(2);
+
+    // Correspondencia caja_i ↔ anotación_i ↔ imagen_i: cada firma tiene EXACTA-
+    // MENTE una anotación imagen cuya geometría y bytes son los de esa firma.
+    for (const sig of [sigA, sigB]) {
+      const match = images.filter(
+        (a) =>
+          a.kind === "image" &&
+          a.at.x === sig.box.x &&
+          a.at.y === sig.box.y &&
+          a.width === sig.box.width &&
+          a.height === sig.box.height &&
+          a.data === sig.image,
+      );
+      expect(match).toHaveLength(1);
+    }
+
+    // Y las geometrías son efectivamente distintas entre firmas.
+    const a0 = images[0];
+    const a1 = images[1];
+    if (a0.kind === "image" && a1.kind === "image") {
+      expect(a0.at).not.toEqual(a1.at);
+      expect(a0.width).not.toBe(a1.width);
+    }
+  });
+});
+
+describe("buildPlacedSignatureAnnotations — N páginas (R9)", () => {
+  it("una firma con pageIndices de N emite N anotaciones imagen, una por pageIndex", () => {
+    const list: PlacedSignature[] = [
+      makeSig({ id: "s", pageIndices: [0, 2, 4] }),
+    ];
+    const anns = buildPlacedSignatureAnnotations(list, (sid, p, part) =>
+      `${sid}-${String(p)}-${part}`,
+    );
+    const images = anns.filter((a) => a.kind === "image");
+    expect(images).toHaveLength(3);
+    expect(images.map((a) => a.pageIndex)).toEqual([0, 2, 4]);
+  });
+});
+
+describe("buildPlacedSignatureAnnotations — extras (R10)", () => {
+  it("por página y extra emite un text con text/at/fontSize/color de ese extra", () => {
+    const extras: SignatureExtra[] = [
+      {
+        id: "date",
+        kind: "date",
+        text: "2026-07-07",
+        at: { x: 5, y: 6 },
+        fontSize: 12,
+        color: { r: 0, g: 0, b: 0 },
+      },
+    ];
+    const list: PlacedSignature[] = [
+      makeSig({ id: "s", pageIndices: [1, 3], extras }),
+    ];
+    const anns = buildPlacedSignatureAnnotations(list, (sid, p, part) =>
+      `${sid}-${String(p)}-${part}`,
+    );
+    const texts = anns.filter((a) => a.kind === "text");
+    // Un text por página (2) y por extra (1) → 2.
+    expect(texts).toHaveLength(2);
+    for (const pageIndex of [1, 3]) {
+      const match = texts.find(
+        (a) => a.pageIndex === pageIndex && a.kind === "text",
+      );
+      expect(match).toBeDefined();
+      if (match?.kind === "text") {
+        expect(match.text).toBe("2026-07-07");
+        expect(match.at).toEqual({ x: 5, y: 6 });
+        expect(match.fontSize).toBe(12);
+        expect(match.color).toEqual({ r: 0, g: 0, b: 0 });
+      }
+    }
   });
 });

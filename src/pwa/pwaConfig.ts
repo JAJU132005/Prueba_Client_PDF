@@ -25,6 +25,11 @@ export const PWA_OPTIONS = {
   workbox: {
     globPatterns: ["**/*.{html,css,js,mjs,wasm,woff2,png,svg,ico,json}"],
     navigateFallback: "index.html",
+    // Cache-busting: al activarse un SW nuevo, workbox elimina los precachés de
+    // builds anteriores en vez de servir assets obsoletos. Combinado con
+    // `registerType: "autoUpdate"` (skipWaiting + clientsClaim), un build nuevo
+    // toma el control y limpia lo viejo sin esperar al cierre de pestañas. (#42 R7)
+    cleanupOutdatedCaches: true,
     // El core WASM de Tesseract.js (`/tesseract/…`, feature #26) supera el
     // límite por defecto de workbox (2 MiB). Se eleva para precachear esos
     // assets locales y mantener el OCR disponible offline, coherente con la

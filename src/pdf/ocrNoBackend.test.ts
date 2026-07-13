@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import ocrPdfSource from "@/pdf/ocrPdf.ts?raw";
 import tesseractEngineSource from "@/lib/tesseractOcrEngine.ts?raw";
+import ocrWorkerCacheSource from "@/lib/ocrWorkerCache.ts?raw";
 import pdfWorkerApiSource from "@/workers/pdfWorkerApi.ts?raw";
 import pdfClientSource from "@/workers/pdfClient.ts?raw";
 import ocrRouteSource from "@/routes/Ocr.tsx?raw";
@@ -16,6 +17,7 @@ import ocrRouteSource from "@/routes/Ocr.tsx?raw";
 const MODULES: { label: string; source: string }[] = [
   { label: "ocrPdf.ts", source: ocrPdfSource },
   { label: "tesseractOcrEngine.ts", source: tesseractEngineSource },
+  { label: "ocrWorkerCache.ts", source: ocrWorkerCacheSource },
   { label: "pdfWorkerApi.ts", source: pdfWorkerApiSource },
   { label: "pdfClient.ts", source: pdfClientSource },
   { label: "Ocr.tsx", source: ocrRouteSource },
@@ -81,5 +83,33 @@ describe("ocr_expanded #32 — invariantes cero-red (R4, R22, R23)", () => {
     expect(ocrRouteSource).not.toMatch(/from ["']tesseract\.js["']/);
     expect(ocrRouteSource).toMatch(/pdfClient\.ocr\(/);
     expect(ocrRouteSource).not.toMatch(/ocrImages\(/);
+  });
+});
+
+describe("fix_ocr_recognition #34 — cero-red, rutas locales y formato (R3a, R3b, R4)", () => {
+  it("ocrWorkerCache.ts no contiene llamadas de red sospechosas (#34 R3a)", () => {
+    for (const pattern of FORBIDDEN) {
+      expect(ocrWorkerCacheSource).not.toMatch(pattern);
+    }
+  });
+
+  it("ocrWorkerCache.ts no referencia CDN ni URLs http(s):// (#34 R3a, R3b)", () => {
+    expect(ocrWorkerCacheSource).not.toMatch(/unpkg/i);
+    expect(ocrWorkerCacheSource).not.toMatch(/jsdelivr/i);
+    expect(ocrWorkerCacheSource).not.toMatch(/cdn/i);
+    expect(ocrWorkerCacheSource).not.toMatch(/https?:\/\//i);
+  });
+
+  it("tesseractOcrEngine.ts define todas las rutas de asset bajo /tesseract/ (#34 R3b)", () => {
+    // Cada literal de ruta de asset de Tesseract es del propio origen.
+    const assetPaths = ["/tesseract/worker.min.js", "/tesseract/", "/tesseract/lang"];
+    for (const path of assetPaths) {
+      expect(tesseractEngineSource).toContain(path);
+    }
+    expect(tesseractEngineSource).not.toMatch(/https?:\/\//i);
+  });
+
+  it("tesseractOcrEngine.ts pasa gzip: false a createWorker (#34 R4)", () => {
+    expect(tesseractEngineSource).toMatch(/gzip:\s*false/);
   });
 });

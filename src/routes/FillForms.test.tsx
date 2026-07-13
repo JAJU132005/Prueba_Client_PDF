@@ -136,9 +136,6 @@ function fakeClient(overrides: Partial<PdfClient> = {}): PdfClient {
     async annotate() {
       return new Uint8Array([9]);
     },
-    async sign() {
-      return new Uint8Array();
-    },
     async detectForm() {
       return { hasFields: false, fields: [] };
     },
@@ -235,6 +232,15 @@ describe("FillForms — con campos: rellenado y aplanado (R19, R20, R22, R23)", 
     expect(capturedInput && Array.from(capturedInput)).toEqual([10, 20, 30]);
     const fills = capturedOptions?.fills as FieldFill[];
     expect(fills).toEqual([{ name: "nombre", kind: "text", value: "Ada" }]);
+
+    // Flujo click-driven (#39 R11, R16): la descarga la dispara el botón guiado
+    // del estado `done`, no una descarga automática.
+    const downloadBtn = await screen.findByRole("button", {
+      name: "⇩ Descargar documento",
+    });
+    expect(downloadBtn).toHaveClass("download-cta");
+    expect(downloadBlob).not.toHaveBeenCalled();
+    fireEvent.click(downloadBtn);
 
     expect(downloadBlob).toHaveBeenCalledTimes(1);
     const [blob, name] = vi.mocked(downloadBlob).mock.calls[0];
@@ -415,9 +421,96 @@ describe("FillForms — sin campos: exportar por annotate (R16, R17, R22, R23)",
     expect(capturedAnnotations).toHaveLength(1);
     expect(capturedAnnotations?.[0].kind).toBe("text"); // (R16)
 
-    await waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1)); // (R23)
-    const [blob] = vi.mocked(downloadBlob).mock.calls[0];
+    // Click-driven (#39 R11, R16): descarga al pulsar el botón guiado. (R23)
+    const downloadBtn = await screen.findByRole("button", {
+      name: "⇩ Descargar documento",
+    });
+    expect(downloadBlob).not.toHaveBeenCalled();
+    fireEvent.click(downloadBtn);
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1));
+    const [blob, name] = vi.mocked(downloadBlob).mock.calls[0];
     expect(blob).toBeInstanceOf(Blob);
+    expect(name).toBe("documento-anotado.pdf");
+  });
+});
+
+describe("FillForms — anuncio accesible y copy en `done` (#39 R15, R16)", () => {
+  it("anuncia el resultado con role=status y copy 'listo para descargar' sin robar foco", async () => {
+    const client = fakeClient({
+      async detectForm() {
+        return TEXT_MODEL;
+      },
+      async fillForms() {
+        return new Uint8Array([1, 2, 3]);
+      },
+    });
+    const { container } = renderAt(client);
+
+    addPdf(container, makePdfFile([10, 20, 30]));
+    await screen.findByLabelText("nombre");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Rellenar y descargar" }),
+    );
+
+    const status = await screen.findByRole("status"); // (R15)
+    expect(status.textContent).toMatch(/descárgalo abajo/i); // (R16)
+    expect(status.textContent).not.toMatch(/se ha\s+descargado/i); // (R16)
+    const downloadBtn = screen.getByRole("button", {
+      name: "⇩ Descargar documento",
+    });
+    expect(document.activeElement).not.toBe(downloadBtn); // no roba foco (R5)
+  });
+});
+
+describe("FillForms — deshacer/rehacer de la capa de anotación (#37 R28, R33)", () => {
+  // La capa versionada por el historial es la de ANOTACIONES del modo SIN
+  // campos; los campos AcroForm usan el undo NATIVO del input (R20), no este
+  // historial. Estos tests operan sobre un PDF sin campos.
+  async function addNoFieldAnnotation(text: string): Promise<void> {
+    const textTool = await screen.findByRole("button", { name: "Texto" });
+    fireEvent.click(textTool);
+    const overlay = await screen.findByTestId("annotation-overlay");
+    fireEvent.click(overlay, { clientX: 20, clientY: 30 });
+    const textInput = await screen.findByTestId("annotation-text-input");
+    fireEvent.change(textInput, { target: { value: text } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir" }));
+  }
+
+  it("añade una anotación y la deshace/rehace con el botón (R28)", async () => {
+    const client = fakeClient({
+      async detectForm() {
+        return { hasFields: false, fields: [] };
+      },
+    });
+    const { container } = renderAt(client);
+
+    addPdf(container, makePdfFile([1, 2]));
+    await addNoFieldAnnotation("Nota");
+    expect(screen.getByTestId("annotation-text")).toHaveTextContent("Nota");
+
+    fireEvent.click(screen.getByRole("button", { name: "Deshacer" }));
+    expect(screen.queryByTestId("annotation-text")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Rehacer" }));
+    expect(screen.getByTestId("annotation-text")).toHaveTextContent("Nota");
+  });
+
+  it("cambiar de archivo limpia el historial de anotaciones (R33)", async () => {
+    const client = fakeClient({
+      async detectForm() {
+        return { hasFields: false, fields: [] };
+      },
+    });
+    const { container } = renderAt(client);
+
+    addPdf(container, makePdfFile([1, 2]));
+    await addNoFieldAnnotation("Vieja");
+    expect(screen.getByRole("button", { name: "Deshacer" })).toBeEnabled();
+
+    addPdf(container, makePdfFile([7, 8]));
+    await screen.findByTestId("annotation-overlay");
+    expect(screen.getByRole("button", { name: "Deshacer" })).toBeDisabled();
+    expect(screen.queryByTestId("annotation-text")).not.toBeInTheDocument();
   });
 });
 

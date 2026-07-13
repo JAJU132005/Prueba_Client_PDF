@@ -351,6 +351,58 @@ describe("ocrPdf — ocrImages (R3–R13, R19)", () => {
     expect(progress).toContain(0.75);
   });
 
+  it("camino feliz: texto conocido en 1-2 páginas → texto concatenado sin lanzar (#34 R1)", async () => {
+    const one = fakeEngine([{ text: "SOLO UNA" }]);
+    const single = await ocrImages([pngInput(PNG_120x80)], one, {
+      language: "spa",
+      output: "text",
+    });
+    expect(single.text).toBe("SOLO UNA");
+
+    const two = fakeEngine([{ text: "PAGINA UNO" }, { text: "PAGINA DOS" }]);
+    const multi = await ocrImages(
+      [pngInput(PNG_120x80), pngInput(PNG_60x40)],
+      two,
+      { language: "eng", output: "text" },
+    );
+    expect(multi.text).toBe("PAGINA UNO" + OCR_PAGE_SEPARATOR + "PAGINA DOS");
+  });
+
+  it("el motor lanza en recognize → ocrImages rechaza con OcrFailedError (#34 R5)", async () => {
+    const throwingEngine: OcrEngine = {
+      async recognize(): Promise<OcrPageRecognition> {
+        throw new Error("fallo crudo del motor WASM");
+      },
+      async terminate() {
+        // no-op
+      },
+    };
+    await expect(
+      ocrImages([pngInput(PNG_120x80)], throwingEngine, {
+        language: "eng",
+        output: "text",
+      }),
+    ).rejects.toBeInstanceOf(OcrFailedError);
+  });
+
+  it("un OcrFailedError del motor se relanza tal cual (no se re-envuelve) (#34 R5)", async () => {
+    const marker = new OcrFailedError("mensaje específico del motor");
+    const failingEngine: OcrEngine = {
+      async recognize(): Promise<OcrPageRecognition> {
+        throw marker;
+      },
+      async terminate() {
+        // no-op
+      },
+    };
+    await expect(
+      ocrImages([pngInput(PNG_120x80)], failingEngine, {
+        language: "eng",
+        output: "text",
+      }),
+    ).rejects.toBe(marker);
+  });
+
   it("ocrImages corre en jsdom sin tocar el DOM (R19)", async () => {
     const createElement = vi.spyOn(document, "createElement");
     const engine = fakeEngine([{ text: "sin dom" }]);

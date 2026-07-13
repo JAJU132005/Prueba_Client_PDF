@@ -37,7 +37,7 @@ function head(o: HeadOptions = {}): string {
   let eyes: string;
   if (o.sleep) {
     eyes =
-      '<path d="M-9 0 q2.5 3 5 0 M4 0 q2.5 3 5 0" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>';
+      '<path d="M-9 0 q2.5 3 5 0 M4 0 q2.5 3 5 0" fill="none" stroke="var(--panda-eye,#fff)" stroke-width="1.8" stroke-linecap="round"/>';
   } else if (o.shades) {
     eyes =
       '<rect x="-12" y="-4" width="10.5" height="7.5" rx="3" fill="#15130f"/><rect x="1.5" y="-4" width="10.5" height="7.5" rx="3" fill="#15130f"/><line x1="-1.5" y1="-1" x2="1.5" y2="-1" stroke="#15130f" stroke-width="2"/>';
@@ -45,7 +45,7 @@ function head(o: HeadOptions = {}): string {
     const px = o.look === "left" ? -1.2 : o.look === "right" ? 1.2 : 0;
     const py = o.look === "up" ? -1 : 0.4;
     eyes =
-      `<circle cx="-6.5" cy="0" r="2.9" fill="#fff"/><circle cx="6.5" cy="0" r="2.9" fill="#fff"/>` +
+      `<circle cx="-6.5" cy="0" r="2.9" fill="var(--panda-eye,#fff)"/><circle cx="6.5" cy="0" r="2.9" fill="var(--panda-eye,#fff)"/>` +
       `<circle cx="${-6.5 + px}" cy="${py}" r="1.6" fill="${INK}"/>` +
       `<circle cx="${6.5 + px}" cy="${py}" r="1.6" fill="${INK}"/>`;
   }
@@ -117,7 +117,7 @@ function paper(
   lines?: number | null,
   extra?: string,
 ): string {
-  let g = `<rect width="${w}" height="${h}" rx="3" fill="#fff" stroke="${INK}" stroke-width="2.4"/>`;
+  let g = `<rect width="${w}" height="${h}" rx="3" fill="var(--surface,#fff)" stroke="${INK}" stroke-width="2.4"/>`;
   const n = lines == null ? 4 : lines;
   for (let i = 1; i <= n; i++) {
     g += `<line x1="${w * 0.14}" y1="${(h * i) / (n + 1)}" x2="${w * 0.86}" y2="${(h * i) / (n + 1)}" stroke="#cfc9bb" stroke-width="2.2" stroke-linecap="round"/>`;
@@ -424,7 +424,7 @@ const ART: Record<PandaArtKind, ArtDefinition> = {
       function pola(x: number, y: number, rot: number, cross: boolean): string {
         return (
           `<g transform="translate(${x} ${y}) rotate(${rot})">` +
-          `<rect width="46" height="54" fill="#fff" stroke="${INK}" stroke-width="2.2"/>` +
+          `<rect width="46" height="54" fill="var(--surface,#fff)" stroke="${INK}" stroke-width="2.2"/>` +
           `<rect x="5" y="5" width="36" height="34" fill="#cfc9bb"/>` +
           `<circle cx="23" cy="-1" r="4.5" fill="${RED}" stroke="${INK}" stroke-width="1.8"/>` +
           (cross
@@ -459,7 +459,7 @@ const ART: Record<PandaArtKind, ArtDefinition> = {
           `<circle cx="44" cy="-12" r="5" fill="${RED}" stroke="${INK}" stroke-width="2"/>` +
           `<rect x="-34" y="34" width="68" height="7" rx="3" fill="${INK}"/>`,
       ) +
-      `<g transform="translate(122 122) rotate(4)"><rect width="56" height="62" fill="#fff" stroke="${INK}" stroke-width="2.4"/><rect x="6" y="6" width="44" height="40" fill="#cfc9bb"/><text x="28" y="58" text-anchor="middle" style="${HAND};font-size:11px" fill="${SOFT}">pág. 1</text></g>` +
+      `<g transform="translate(122 122) rotate(4)"><rect width="56" height="62" fill="var(--surface,#fff)" stroke="${INK}" stroke-width="2.4"/><rect x="6" y="6" width="44" height="40" fill="#cfc9bb"/><text x="28" y="58" text-anchor="middle" style="${HAND};font-size:11px" fill="${SOFT}">pág. 1</text></g>` +
       panda(258, 106, 1, { look: "left" }, limb(-11, -3, -26, -10), null) +
       ono(216, 34, "¡FLASH!", ORANGE, 20, -8),
   },
@@ -534,7 +534,7 @@ const ART: Record<PandaArtKind, ArtDefinition> = {
     svg: () => {
       let stack = "";
       for (let i = 0; i < 5; i++) {
-        stack += `<rect x="${96 - i}" y="${118 - i * 9}" width="${128 + i * 2}" height="8" rx="3" fill="#fff" stroke="${INK}" stroke-width="2"/>`;
+        stack += `<rect x="${96 - i}" y="${118 - i * 9}" width="${128 + i * 2}" height="8" rx="3" fill="var(--surface,#fff)" stroke="${INK}" stroke-width="2"/>`;
       }
       return (
         stack +

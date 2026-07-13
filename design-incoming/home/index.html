@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cliente-PDF — Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Gochi+Hand&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../tokens/tokens.css">
+<script src="../shared/panda-art.js" defer></script>
+<script src="../shared/panda-widget.js" defer></script>
+<style>
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 28px; }
+  .tool {
+    display: flex; flex-direction: column; gap: 8px; min-height: 218px;
+    padding: 24px 24px 18px 24px; text-decoration: none; color: var(--ink);
+    transform: rotate(var(--rot, 0deg)); transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .tool:hover { transform: translateY(-6px) rotate(0deg); box-shadow: 7px 10px 0 var(--shadow); }
+  .tool-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .tool-icon {
+    font-family: var(--font-scrawl); font-size: 23px; line-height: 1;
+    display: grid; place-items: center; width: 54px; height: 54px;
+    border: 2.5px dashed var(--ink); border-radius: 60% 40% 55% 45%/45% 55% 40% 60%;
+  }
+  .tool h3 { margin: 8px 0 0 0; font-family: var(--font-display); font-weight: 400; font-size: 28px; line-height: 1.15; }
+  .tool p { margin: 0; font-size: 15.5px; line-height: 1.45; font-weight: 600; color: var(--ink-soft); }
+  .tool panda-art { width: 84px; margin-top: auto; }
+  .bg-ligera { background: var(--hl-green); } .bg-media { background: var(--hl-orange); } .bg-pesada { background: var(--hl-red); }
+  .comic { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+  .comic > div { padding: 16px; background: var(--card); border: 2.5px solid var(--ink); border-radius: 14px 20px 12px 22px/22px 12px 20px 14px; }
+</style>
+</head>
+<body>
+
+<header class="wrap" style="display:flex;align-items:center;flex-wrap:wrap;gap:14px;padding-top:20px">
+  <div style="display:flex;align-items:center;gap:12px">
+    <panda-art kind="pose-ligera" label="Cliente-PDF" style="width:52px"></panda-art>
+    <div>
+      <div class="hand" style="font-size:30px;line-height:1">cliente-pdf</div>
+      <div class="mono soft" style="font-size:11px">herramientas PDF · 100% en tu navegador</div>
+    </div>
+  </div>
+  <div style="flex:1 1 auto"></div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <span class="hand" style="display:flex;align-items:center;gap:7px;font-size:17px"><span style="width:10px;height:10px;border-radius:50% 45% 55% 50%;background:var(--mk-green);border:1.5px solid var(--ink);display:inline-block"></span>En línea</span>
+    <button class="btn" id="theme" type="button">modo pizarra ☾</button>
+    <span class="badge lv-ligera">✓ 100% local</span>
+  </div>
+</header>
+
+<!-- OfflineBanner: nota pegada con cinta -->
+<div class="card" style="max-width:820px;margin:14px auto 0 auto;padding:10px 20px;border-radius:20px 8px 18px 10px/10px 18px 8px 20px;transform:rotate(-.6deg);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+  <span class="tape"></span>
+  <span class="hand" style="font-size:18px">Funciona sin internet · instálala y úsala en un búnker si quieres 🐼</span>
+  <a class="hand" href="#como-funciona" style="font-size:17px;color:var(--ink);box-shadow:inset 0 -7px 0 var(--hl-orange)">Cómo instalarla</a>
+</div>
+
+<!-- Hero = portada del diario -->
+<section class="wrap" style="padding-top:44px;display:flex;gap:44px;flex-wrap:wrap;align-items:flex-start">
+  <div style="flex:1 1 500px;min-width:320px">
+    <h1 class="hand" style="margin:0;font-size:clamp(38px,5vw,58px);line-height:1.08">Tus PDF, <span style="box-shadow:inset 0 -14px 0 var(--hl-green)">sin salir de tu navegador</span></h1>
+    <p style="margin:18px 0 4px 0;font-size:19px;font-weight:600;max-width:56ch">Une, divide, rota y convierte tus PDF directamente en tu navegador.</p>
+    <p class="mono soft" style="margin:0 0 22px 0;font-size:14px">sin subida · sin registro · funciona offline</p>
+    <div class="card" style="display:inline-flex;align-items:baseline;gap:14px;padding:12px 22px;transform:rotate(-1deg)">
+      <span class="hand" style="font-size:22px">Bytes enviados a internet:</span>
+      <span class="zero" style="font-size:58px;line-height:1">0</span>
+    </div>
+  </div>
+  <div style="flex:0 1 360px;min-width:280px;display:flex;flex-direction:column;gap:18px">
+    <div style="padding:8px 12px;border:2.5px dashed var(--ink);border-radius:var(--radius-scrap);background:var(--card);transform:rotate(1.2deg)">
+      <panda-art kind="portada" style="width:100%"></panda-art>
+    </div>
+    <div style="padding:8px 14px 2px;border:2.5px dashed var(--ink-soft);border-radius:14px;background:var(--card);transform:rotate(-.8deg)">
+      <panda-art kind="nube" style="width:150px;margin:0 auto"></panda-art>
+      <p class="hand" style="margin:4px 0 8px 0;text-align:center;font-size:17px">aquí no hay nube — todo pasa en tu navegador</p>
+    </div>
+  </div>
+</section>
+
+<!-- Rejilla: 15 tarjetas, ORDEN Y TAMAÑO EXACTOS de la captura (categorías mezcladas a propósito) -->
+<main class="wrap" style="padding-top:26px">
+  <div class="grid">
+
+    <a class="card tool" style="--rot:-1.4deg" href="../templates/01-multi-file/index.html" data-route="/merge">
+      <span class="tape"></span>
+      <div class="tool-top"><span class="tool-icon bg-ligera">＋</span><span class="badge lv-ligera">Ligera · Pan comido</span></div>
+      <h3><span class="hl-ligera">Unir PDF</span></h3>
+      <p>Combina varios PDF en un único documento, en el orden que elijas.</p>
+      <panda-art kind="pose-ligera"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:0.9deg" href="../templates/03-page-select/index.html" data-route="/split">
+      <span class="pin"></span>
+      <div class="tool-top"><span class="tool-icon bg-ligera">✂</span><span class="badge lv-ligera">Ligera · Pan comido</span></div>
+      <h3><span class="hl-ligera">Dividir PDF</span></h3>
+      <p>Separa un PDF en varios archivos por páginas o rangos.</p>
+      <panda-art kind="pose-ligera"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:-0.7deg" href="../templates/02-options/index.html" data-route="/rotate">
+      <span class="clip"></span>
+      <div class="tool-top"><span class="tool-icon bg-ligera">90°</span><span class="badge lv-ligera">Ligera · Pan comido</span></div>
+      <h3><span class="hl-ligera">Rotar PDF</span></h3>
+      <p>Gira las páginas de tu PDF y guárdalo con la orientación correcta.</p>
+      <panda-art kind="pose-ligera"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:1.6deg" href="../templates/03-page-select/index.html" data-route="/organize">
+      <span class="pin"></span>
+      <div class="tool-top"><span class="tool-icon bg-media">1↔3</span><span class="badge lv-media">Media · Ahí va la cosa</span></div>
+      <h3><span class="hl-media">Organizar páginas</span></h3>
+      <p>Reordena, duplica o elimina páginas de tu documento.</p>
+      <panda-art kind="pose-media"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:-1.1deg" href="../templates/03-page-select/index.html" data-route="/pdf-to-images">
+      <span class="tape"></span>
+      <div class="tool-top"><span class="tool-icon bg-media">→img</span><span class="badge lv-media">Media · Ahí va la cosa</span></div>
+      <h3><span class="hl-media">PDF a imágenes</span></h3>
+      <p>Convierte cada página de tu PDF en una imagen descargable.</p>
+      <panda-art kind="pose-media"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:0.8deg" href="../templates/01-multi-file/index.html" data-route="/images-to-pdf">
+      <span class="clip"></span>
+      <div class="tool-top"><span class="tool-icon bg-ligera">→pdf</span><span class="badge lv-ligera">Ligera · Pan comido</span></div>
+      <h3><span class="hl-ligera">Imágenes a PDF</span></h3>
+      <p>Reúne tus imágenes en un único PDF listo para compartir.</p>
+      <panda-art kind="pose-ligera"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:-1.8deg" href="../templates/04-editor-preview/index.html" data-route="/page-numbers">
+      <span class="pin"></span>
+      <div class="tool-top"><span class="tool-icon bg-ligera">#1</span><span class="badge lv-ligera">Ligera · Pan comido</span></div>
+      <h3><span class="hl-ligera">Números de página</span></h3>
+      <p>Añade numeración con la posición y el formato que prefieras.</p>
+      <panda-art kind="pose-ligera"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:1.2deg" href="../templates/04-editor-preview/index.html" data-route="/watermark">
+      <span class="tape"></span>
+      <div class="tool-top"><span class="tool-icon bg-ligera">≋</span><span class="badge lv-ligera">Ligera · Pan comido</span></div>
+      <h3><span class="hl-ligera">Marca de agua</span></h3>
+      <p>Superpón texto o imagen con opacidad y ángulo a tu gusto.</p>
+      <panda-art kind="pose-ligera"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:-0.6deg" href="../templates/02-options/index.html" data-route="/compress">
+      <span class="pin"></span>
+      <div class="tool-top"><span class="tool-icon bg-pesada">→←</span><span class="badge lv-pesada">Pesada · Modo bestia</span></div>
+      <h3><span class="hl-pesada">Comprimir PDF</span></h3>
+      <p>Reduce el tamaño recomprimiendo las imágenes del documento.</p>
+      <panda-art kind="pose-pesada"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:1.5deg" href="../templates/02-options/index.html" data-route="/protect">
+      <span class="clip"></span>
+      <div class="tool-top"><span class="tool-icon bg-media">•••</span><span class="badge lv-media">Media · Ahí va la cosa</span></div>
+      <h3><span class="hl-media">Proteger / desbloquear</span></h3>
+      <p>Cifra tu PDF con contraseña o quítala si la conoces.</p>
+      <panda-art kind="pose-media"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:-1.2deg" href="../templates/04-editor-preview/index.html" data-route="/edit">
+      <span class="tape"></span>
+      <div class="tool-top"><span class="tool-icon bg-pesada">✎</span><span class="badge lv-pesada">Pesada · Modo bestia</span></div>
+      <h3><span class="hl-pesada">Editar / Anotar PDF</span></h3>
+      <p>Texto, resaltados, dibujos, formas e imágenes sobre tus páginas.</p>
+      <panda-art kind="pose-pesada"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:0.7deg" href="../templates/04-editor-preview/index.html" data-route="/sign">
+      <span class="pin"></span>
+      <div class="tool-top"><span class="tool-icon bg-media">✗﹏</span><span class="badge lv-media">Media · Ahí va la cosa</span></div>
+      <h3><span class="hl-media">Firmar PDF</span></h3>
+      <p>Dibuja o sube tu firma y colócala donde haga falta.</p>
+      <panda-art kind="pose-media"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:-1.6deg" href="../templates/04-editor-preview/index.html" data-route="/fill-forms">
+      <span class="clip"></span>
+      <div class="tool-top"><span class="tool-icon bg-media">10/10</span><span class="badge lv-media">Media · Ahí va la cosa</span></div>
+      <h3><span class="hl-media">Rellenar formularios</span></h3>
+      <p>Detecta los campos del PDF y rellénalos sin imprimir nada.</p>
+      <panda-art kind="pose-media"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:1.0deg" href="../templates/02-options/index.html" data-route="/ocr">
+      <span class="pin"></span>
+      <div class="tool-top"><span class="tool-icon bg-pesada">Aa?</span><span class="badge lv-pesada">Pesada · Modo bestia</span></div>
+      <h3><span class="hl-pesada">OCR</span></h3>
+      <p>Reconoce el texto de PDFs escaneados y hazlo buscable.</p>
+      <panda-art kind="pose-pesada"></panda-art>
+    </a>
+
+    <a class="card tool" style="--rot:-0.9deg" href="../templates/04-editor-preview/index.html" data-route="/redact">
+      <span class="tape"></span>
+      <div class="tool-top"><span class="tool-icon bg-media">█▌</span><span class="badge lv-media">Media · Ahí va la cosa</span></div>
+      <h3><span class="hl-media">Redactar / ocultar</span></h3>
+      <p>Oculta información sensible de forma permanente e irreversible.</p>
+      <panda-art kind="pose-media"></panda-art>
+    </a>
+
+  </div>
+</main>
+
+<!-- Cómo funciona: cómic de 3 viñetas -->
+<section id="como-funciona" class="wrap" style="padding-top:56px">
+  <h2 class="hand" style="margin:0 0 22px 0;font-size:36px"><span style="box-shadow:inset 0 -10px 0 var(--hl-orange)">Cómo funciona</span> <span class="soft" style="font-size:22px">(cómic de 3 viñetas)</span></h2>
+  <div class="comic">
+    <div style="transform:rotate(-.7deg)">
+      <div style="border:2.5px solid var(--ink-soft);border-radius:10px;padding:4px"><panda-art kind="comic1" style="width:100%"></panda-art></div>
+      <p class="hand" style="margin:12px 0 0 0;font-size:19px">1. Tu archivo entra a tu navegador.</p>
+    </div>
+    <div style="transform:rotate(.8deg)">
+      <div style="border:2.5px solid var(--ink-soft);border-radius:10px;padding:4px"><panda-art kind="comic2" style="width:100%"></panda-art></div>
+      <p class="hand" style="margin:12px 0 0 0;font-size:19px">2. Se procesa dentro, con el panda de guardia.</p>
+    </div>
+    <div style="transform:rotate(-.4deg)">
+      <div style="border:2.5px solid var(--ink-soft);border-radius:10px;padding:4px"><panda-art kind="comic3" style="width:100%"></panda-art></div>
+      <p class="hand" style="margin:12px 0 0 0;font-size:19px">3. Sale por la misma puerta. Sin servidores.</p>
+    </div>
+  </div>
+  <p class="hand soft" style="margin:22px 0 0 0;font-size:18px">Para instalarla: menú del navegador → «Instalar aplicación». Una vez instalada, funciona sin conexión.</p>
+</section>
+
+<footer class="wrap" style="margin-top:40px;padding-top:26px;padding-bottom:120px;border-top:3px dashed var(--ink-soft);display:flex;flex-wrap:wrap;gap:24px;align-items:center">
+  <span class="hand" style="font-size:20px">Bytes enviados a internet: <b class="zero" style="font-size:30px">0</b></span>
+  <span class="mono soft" style="font-size:12px">pdf-lib · pdf.js · qpdf-wasm · tesseract — todo corre en tu navegador</span>
+  <span class="hand soft" style="margin-left:auto;font-size:17px">lo que pasa en tu diario, se queda en tu diario 🤝</span>
+</footer>
+
+<panda-widget></panda-widget>
+
+<script>
+  /* Piel del toggle claro/oscuro existente (la persistencia real ya está en la app) */
+  document.getElementById('theme').addEventListener('click', function () {
+    var dark = document.documentElement.classList.toggle('dark');
+    this.textContent = dark ? 'modo cuaderno ☀' : 'modo pizarra ☾';
+  });
+</script>
+</body>
+</html>

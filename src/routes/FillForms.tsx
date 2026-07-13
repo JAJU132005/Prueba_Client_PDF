@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AnnotationEditor } from "@/components/AnnotationEditor";
+import { DownloadCta } from "@/components/DownloadCta";
 import { Dropzone } from "@/components/Dropzone";
 import { ErrorBubble } from "@/components/ErrorBubble";
 import { FormFieldOverlay } from "@/components/FormFieldOverlay";
 import { ProgressBar } from "@/components/ProgressBar";
 import { ToolPageHeader } from "@/components/ToolPageHeader";
 import { LivePreview } from "@/components/LivePreview";
+import { UndoControls } from "@/components/UndoControls";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
+import { useUndoableState } from "@/lib/useUndoableState";
+import { useUndoKeybinding } from "@/lib/useUndoKeybinding";
 import {
   DEFAULT_MAX_FILE_BYTES,
   type FileValidationConfig,
 } from "@/lib/fileValidation";
 import { pdfjsPageCount } from "@/lib/pdfjsPageCounter";
+import type { ResourceCost } from "@/lib/resourceCost";
 import type { Annotation } from "@/pdf/annotate";
 import {
   DEFAULT_TOOL_SETTINGS,
@@ -24,6 +29,7 @@ import {
   removeAnnotation,
   selectAnnotation,
   updateAnnotation,
+  type AnnotationEditorState,
   type AnnotationTool,
 } from "@/pdf/annotationModel";
 import type {
@@ -179,6 +185,13 @@ export function FillForms({
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Resultado listo para la descarga click-driven (#39 R11, R16): Blob local +
+  // nombre de salida + nivel de coste del camino que lo generó.
+  const [result, setResult] = useState<{
+    blob: Blob;
+    name: string;
+    cost: ResourceCost;
+  } | null>(null);
 
   // Estado del overlay visual de campos (#31).
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
@@ -186,7 +199,13 @@ export function FillForms({
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Estado del editor de anotaciones inline (modo sin campos, #31 reusa #29).
-  const [editorState, setEditorState] = useState(createAnnotationState());
+  // Versionado con historial de deshacer (#37 R28); la capa de anotación es la
+  // que soporta undo/redo. Los campos AcroForm usan el undo NATIVO del input
+  // (R20), no este historial.
+  const editorHistory = useUndoableState<AnnotationEditorState>(
+    createAnnotationState(),
+  );
+  const editorState = editorHistory.present;
   const [activeTool, setActiveTool] = useState<AnnotationTool | null>(null);
   const [settings, setSettings] = useState<ToolSettings>(DEFAULT_TOOL_SETTINGS);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -195,12 +214,22 @@ export function FillForms({
   const detectSeq = useRef(0);
   /** Registro de los controles de cada campo, para enfocarlos desde el overlay. */
   const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
+  // Bandera de gesto activo (mover/redimensionar) del editor de anotaciones. (#37 R32)
+  const gestureActiveRef = useRef(false);
 
   useEffect(() => {
     return () => {
       detectSeq.current += 1;
     };
   }, []);
+
+  // Atajo Ctrl+Z / Ctrl+Shift+Z sobre la capa de anotación del modo sin campos;
+  // se ignora con foco en los inputs de los campos (undo nativo). (#37 R28, R31)
+  useUndoKeybinding({
+    onUndo: editorHistory.undo,
+    onRedo: editorHistory.redo,
+    enabled: model !== null && !model.hasFields && pageCount > 0,
+  });
 
   // Carga los bytes de la imagen de anotación cuando cambia el archivo elegido.
   useEffect(() => {
@@ -267,7 +296,9 @@ export function FillForms({
     setPreviewPageIndex(0);
     setPageCount(0);
     setFocusedField(null);
-    setEditorState(createAnnotationState());
+    setResult(null);
+    editorHistory.reset(createAnnotationState()); // (#37 R33)
+    gestureActiveRef.current = false;
     setActiveTool(null);
     setImageFiles([]);
     setImageData(null);
@@ -311,7 +342,13 @@ export function FillForms({
         { fills, flatten }, // (R19, R20)
         (p) => setProgress(p),
       );
-      downloadBlob(pdfBytesToBlob(out), "formulario-relleno.pdf"); // (R23)
+      // Click-driven (#39 R11, R16): guardamos el Blob local (sin red) para que
+      // el usuario lo descargue con el botón guiado del estado `done`.
+      setResult({
+        blob: pdfBytesToBlob(out),
+        name: "formulario-relleno.pdf",
+        cost: "medium",
+      });
       setStatus("done");
     } catch (error) {
       setErrorMessage(messageForError(error));
@@ -333,11 +370,23 @@ export function FillForms({
         annotations, // (R16)
         (p) => setProgress(p),
       );
-      downloadBlob(pdfBytesToBlob(out), "documento-anotado.pdf"); // (R23)
+      // Click-driven (#39 R11, R16): Blob local guardado para descarga guiada.
+      setResult({
+        blob: pdfBytesToBlob(out),
+        name: "documento-anotado.pdf",
+        cost: "heavy",
+      });
       setStatus("done");
     } catch (error) {
       setErrorMessage(messageForError(error));
       setStatus("error");
+    }
+  }
+
+  /** Descarga local por Blob; sin red. (#39 R11, R12 · #25 R23) */
+  function handleDownload(): void {
+    if (result) {
+      downloadBlob(result.blob, result.name);
     }
   }
 
@@ -455,6 +504,13 @@ export function FillForms({
                   />
                 </div>
 
+                <UndoControls
+                  canUndo={editorHistory.canUndo}
+                  canRedo={editorHistory.canRedo}
+                  onUndo={editorHistory.undo}
+                  onRedo={editorHistory.redo}
+                />
+
                 <AnnotationEditor
                   file={files[0]}
                   pageCount={pageCount}
@@ -464,20 +520,36 @@ export function FillForms({
                   activeTool={activeTool}
                   onToolChange={setActiveTool}
                   onAddAnnotation={(a: Annotation) =>
-                    setEditorState((prev) => addAnnotation(prev, a))
+                    editorHistory.set((prev) => addAnnotation(prev, a))
                   }
-                  onUpdateAnnotation={(a: Annotation) =>
-                    setEditorState((prev) => updateAnnotation(prev, a))
-                  }
+                  onUpdateAnnotation={(a: Annotation) => {
+                    // Gesto de mover/redimensionar → coalescido; edición de
+                    // texto → commit discreto. (#37 R28, R32)
+                    if (gestureActiveRef.current) {
+                      editorHistory.updateGesture((prev) =>
+                        updateAnnotation(prev, a),
+                      );
+                    } else {
+                      editorHistory.set((prev) => updateAnnotation(prev, a));
+                    }
+                  }}
                   onRemoveAnnotation={(id: string) =>
-                    setEditorState((prev) => removeAnnotation(prev, id))
+                    editorHistory.set((prev) => removeAnnotation(prev, id))
                   }
                   selectedId={editorState.selectedId}
                   onSelectionChange={(id: string | null) =>
-                    setEditorState((prev) => selectAnnotation(prev, id))
+                    editorHistory.replace((prev) => selectAnnotation(prev, id))
                   }
                   settings={settings}
                   onSettingsChange={setSettings}
+                  onGestureStart={() => {
+                    gestureActiveRef.current = true;
+                    editorHistory.beginGesture();
+                  }}
+                  onGestureEnd={() => {
+                    editorHistory.endGesture();
+                    gestureActiveRef.current = false;
+                  }}
                   imageData={imageData}
                   createId={createId}
                   createRasterizer={createRasterizer}
@@ -559,10 +631,19 @@ export function FillForms({
           </div>
         )}
 
-        {status === "done" && (
-          <div role="status" className="card hand max-w-[640px] text-xl text-ink">
-            <span className="hl-media">¡Listo!</span> Tu documento se ha
-            descargado.
+        {status === "done" && result && (
+          <div className="flex max-w-[640px] flex-col gap-4">
+            {/* Anuncio accesible sin mover el foco (#39 R5, R15); copy de "listo
+                para descargar" coherente con el flujo click-driven (#39 R16). */}
+            <div role="status" className="card hand text-xl text-ink">
+              <span className="hl-media">¡Listo!</span> Tu documento está listo —
+              descárgalo abajo.
+            </div>
+            <DownloadCta
+              onDownload={handleDownload}
+              costLevel={result.cost}
+              label="⇩ Descargar documento"
+            />
           </div>
         )}
 

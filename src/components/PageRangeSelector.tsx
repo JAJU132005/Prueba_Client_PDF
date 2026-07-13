@@ -186,7 +186,7 @@ export function PageRangeSelector({
               >
                 <span
                   className={
-                    url ? "rounded bg-white/80 px-1.5 py-0.5" : undefined
+                    url ? "rounded bg-surface/80 px-1.5 py-0.5" : undefined
                   }
                 >
                   {i + 1}

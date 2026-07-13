@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plantilla 02-options — Rotar PDF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Gochi+Hand&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens/tokens.css">
+<script src="../../shared/panda-art.js" defer></script>
+<script src="../../shared/panda-widget.js" defer></script>
+<style>
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+  .estado { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); letter-spacing: .08em; text-transform: uppercase; margin: 40px 0 10px; }
+  .optpanel { padding: 16px 18px; background: var(--card); border: 2.5px solid var(--ink); border-radius: 18px 10px 20px 8px/8px 20px 10px 18px; box-shadow: 3px 4px 0 var(--shadow); }
+  .chip { composes: none; }
+</style>
+</head>
+<body>
+
+<header class="wrap" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:20px">
+  <a class="hand" href="../../home/index.html" style="font-size:19px;color:var(--ink);text-decoration:none;box-shadow:inset 0 -8px 0 var(--hl-green)">← volver al cuaderno</a>
+  <div style="flex:1"></div>
+  <span class="badge lv-ligera">✓ 100% local</span>
+</header>
+
+<main class="wrap" style="padding-bottom:40px">
+  <p class="mono soft" style="margin:24px 0 0;font-size:12px">PLANTILLA 02-OPTIONS · 1 archivo + formulario simple · herramientas: Rotar (/rotate), Comprimir (/compress 🔴), Proteger/Desbloquear (/protect), OCR (/ocr 🔴)</p>
+
+  <!-- Representativa: Rotar -->
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px">
+    <span class="scrawl" style="font-size:24px;display:grid;place-items:center;width:56px;height:56px;border:2.5px dashed var(--ink);border-radius:60% 40% 55% 45%/45% 55% 40% 60%;background:var(--hl-green)">90°</span>
+    <h1 class="hand" style="margin:0;font-size:clamp(32px,4vw,46px)"><span class="hl-ligera">Rotar PDF</span></h1>
+    <span class="badge lv-ligera">Ligera · Pan comido</span>
+  </div>
+  <div style="margin-top:6px;display:flex;align-items:center;gap:12px">
+    <panda-art kind="pose-ligera" style="width:72px"></panda-art>
+    <p class="hand soft" style="margin:0;font-size:17px">Tu dispositivo ni se despeina.</p>
+  </div>
+
+  <div class="card" style="margin-top:22px;max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-ligera">El panda tuerce el cuello</span> <span class="scrawl soft" style="font-size:20px">¡ÑIIIC!</span></h2>
+    <panda-art kind="rotar" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+    <p class="hand soft" style="margin:10px 0 0;font-size:16px">Al elegir un ángulo, el panda inclina la cabeza ese mismo ángulo; a 180° se pone patas arriba.</p>
+  </div>
+
+  <p class="estado">estado 1 · dropzone simple + archivo cargado</p>
+  <div class="dropzone" style="max-width:640px">
+    <span class="tape" style="left:70px"></span>
+    <p class="hand" style="margin:0;font-size:24px">Arrastra tu PDF aquí — ¡prometo no chismosear!</p>
+    <button class="btn" type="button" style="margin-top:12px">…o elige un archivo</button>
+  </div>
+  <div class="filerow" style="max-width:640px;margin-top:12px;transform:rotate(-.4deg)">
+    <span class="scrawl">🗎</span><span class="hand" style="font-size:19px">recetas-de-la-abuela.pdf</span>
+    <span class="mono soft" style="font-size:12px">2,1 MB · 18 páginas</span><span style="flex:1"></span>
+    <button class="btn" type="button" style="font-size:16px;padding:3px 12px">Vista previa</button>
+  </div>
+
+  <p class="estado">estado 2 · panel de opciones (perilla de caja fuerte escolar)</p>
+  <div class="optpanel" style="max-width:420px">
+    <h3 class="hand" style="margin:0 0 10px;font-size:21px">Ángulo de giro (perilla)</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" type="button" aria-pressed="true" style="background:var(--hl-green)">90°</button>
+      <button class="btn" type="button" aria-pressed="false">180°</button>
+      <button class="btn" type="button" aria-pressed="false">270°</button>
+    </div>
+    <p class="mono soft" style="margin:10px 0 0;font-size:11.5px">el panda inclina la cabeza ese mismo ángulo · aplica al rango elegido (RangeSelector embebido opcional)</p>
+  </div>
+
+  <p class="estado">estado 3 · acción + progreso + resultado</p>
+  <button class="btn btn-primary lv-ligera" type="button">Girar páginas</button>
+  <div style="max-width:640px;margin-top:18px">
+    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="38">
+      <div class="progress-fill" style="width:38%"></div>
+      <span class="progress-label">38% · rama de bambú llenándose</span>
+    </div>
+  </div>
+  <div class="card" style="max-width:420px;margin-top:18px">
+    <h3 class="hand" style="margin:0;font-size:24px"><span class="hl-ligera">¡Listo!</span> Cuello (y páginas) en su sitio.</h3>
+    <panda-art kind="trituradora" style="width:min(240px,100%);margin:8px auto 0"></panda-art>
+    <button class="btn btn-primary lv-ligera" type="button" style="font-size:19px;margin-top:10px">⇩ Descargar resultado</button>
+  </div>
+
+  <!-- Variantes -->
+  <p class="estado">variante · Comprimir PDF (/compress) — PESADA 🔴</p>
+  <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+    <div class="card" style="flex:1 1 420px;max-width:640px">
+      <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-pesada">La prensa panda</span> <span class="scrawl soft" style="font-size:20px">¡CRONCH!</span></h2>
+      <panda-art kind="comprimir" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn" type="button">Suave — panda sentado</button>
+        <button class="btn" type="button" aria-pressed="true" style="background:var(--hl-red)">Medio — panda saltando</button>
+        <button class="btn" type="button">Máximo — panda con yunque</button>
+      </div>
+      <p class="hand" style="margin:12px 0 0;font-size:17px">Resultado = balanza manuscrita: <span class="mono" style="font-size:14px">8,4 MB → 4,9 MB</span>. Caso honesto existente: panda con los brazos arriba — «esto ya está flaco, no puedo hacer magia».</p>
+    </div>
+    <div class="postit" style="flex:0 0 210px">⚠️ En móvil esto suda de verdad
+      <span class="mono" style="display:block;margin-top:6px;font-size:11px;color:rgba(0,0,0,.55)">aviso móvil existente — solo restilizado</span>
+    </div>
+  </div>
+
+  <p class="estado">variante · Proteger / desbloquear (/protect)</p>
+  <div class="card" style="max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-media">El candado del diario</span> <span class="scrawl soft" style="font-size:20px">¡CLIC!</span></h2>
+    <panda-art kind="proteger" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn" type="button" aria-pressed="true" style="background:var(--hl-orange)">Proteger</button>
+      <button class="btn" type="button">Desbloquear</button>
+    </div>
+    <label class="hand" style="display:block;margin-top:12px;font-size:18px">Contraseña (etiqueta colgante)
+      <input type="password" autocomplete="off" placeholder="escríbela aquí…" style="display:block;width:100%;font-family:var(--font-display);font-size:18px;color:var(--ink);background:var(--paper);border:none;border-bottom:2.5px dashed var(--ink);padding:6px 4px;outline:none">
+    </label>
+    <p class="hand soft" style="margin:10px 0 0;font-size:16px">tu contraseña jamás sale de este navegador, palabra de panda 🤝 · contraseña incorrecta → el candado tiembla y el panda niega con el dedo (error real en bocadillo).</p>
+  </div>
+
+  <p class="estado">variante · OCR (/ocr) — LA MÁS PESADA 🔴</p>
+  <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+    <div class="card" style="flex:1 1 420px;max-width:640px">
+      <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-pesada">El panda detective</span> <span class="scrawl soft" style="font-size:20px">¡AJÁ!</span></h2>
+      <panda-art kind="ocr" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn" type="button" aria-pressed="true" style="background:var(--hl-red)">Español</button>
+        <button class="btn" type="button">English</button>
+        <button class="btn" type="button">Français</button>
+        <button class="btn" type="button">Português</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn" type="button">Solo texto</button>
+        <button class="btn" type="button" aria-pressed="true" style="background:var(--hl-red)">PDF buscable</button>
+      </div>
+      <p class="hand" style="margin:12px 0 0;font-size:17px">El progreso real de Tesseract se dibuja como la lupa recorriendo la página y las letras iluminándose. Al terminar: «¡Elemental!» + sello TOP SECRET.</p>
+    </div>
+    <div class="postit" style="flex:0 0 230px;transform:rotate(-2deg)">⚠️ Esta es la más pesada de todas: en móvil, tu teléfono va a sudar de verdad.</div>
+  </div>
+
+  <p class="estado">notas para el implementer</p>
+  <div class="postit" style="max-width:560px;transform:rotate(-1deg)">
+    Compartidos: Dropzone, FileList, RangeSelector (rotar), CostBadge, ProgressBar, ResultPanel.
+    Cablear a `rotate` / `compress` / `protect`·`unlock` / `ocr`. Campo de contraseña sin autocompletar (ya así).
+    El post-it móvil solo aparece cuando el `resource_cost_indicator` existente lo dispara.
+  </div>
+</main>
+
+<panda-widget></panda-widget>
+</body>
+</html>

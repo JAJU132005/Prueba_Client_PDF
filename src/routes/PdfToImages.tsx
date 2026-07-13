@@ -307,7 +307,7 @@ export function PdfToImages(props?: PdfToImagesProps): JSX.Element {
                 <li
                   key={page.index}
                   data-testid={`page-${page.index}`}
-                  className={`relative flex flex-col gap-2 border-[2.2px] border-ink bg-white p-2 shadow-doodle ${
+                  className={`relative flex flex-col gap-2 border-[2.2px] border-ink bg-surface p-2 shadow-doodle ${
                     page.index % 2 === 0 ? "-rotate-1" : "rotate-1"
                   }`}
                 >

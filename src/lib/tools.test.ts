@@ -11,8 +11,8 @@ const VALID_CATEGORIES: ReadonlySet<ToolCategory> = new Set<ToolCategory>([
 ]);
 
 describe("TOOLS", () => {
-  it("lista las 16 herramientas previstas (features #5-#27, #30) (R5)", () => {
-    expect(TOOLS).toHaveLength(16);
+  it("lista las 15 herramientas previstas (features #5-#27; firma unificada #36) (R5)", () => {
+    expect(TOOLS).toHaveLength(15);
   });
 
   it("expone los ids esperados del catálogo (R5)", () => {
@@ -33,7 +33,6 @@ describe("TOOLS", () => {
       "fill-forms",
       "ocr",
       "redact",
-      "sign-free",
     ]);
   });
 
@@ -80,7 +79,6 @@ describe("TOOLS", () => {
       sign: "04-editor-preview",
       "fill-forms": "04-editor-preview",
       redact: "04-editor-preview",
-      "sign-free": "04-editor-preview",
     });
   });
 });

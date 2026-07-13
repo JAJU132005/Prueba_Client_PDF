@@ -79,7 +79,7 @@ export interface PreviewPixelRect {
  *   `computeImageWatermarkSize(content.width, content.height, ...)` (R5).
  */
 export function buildWatermarkOverlay(
-  options: WatermarkOptions,
+  options: Omit<WatermarkOptions, "image">,
   page: PreviewPageSize,
   content: ContentSize,
 ): PreviewOverlay {

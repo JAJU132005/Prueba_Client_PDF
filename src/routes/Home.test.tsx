@@ -62,7 +62,6 @@ describe("Home", () => {
       "Rellenar formularios",
       "Reconocer texto (OCR)",
       "Redactar PDF",
-      "Firmar PDF (colocación libre)",
     ];
     const expectedPaths = [
       "/unir",
@@ -80,7 +79,6 @@ describe("Home", () => {
       "/rellenar-formularios",
       "/reconocer-texto",
       "/redactar",
-      "/firmar-libre",
     ];
     expect(cards.map((card) => card.getAttribute("href"))).toEqual(
       expectedPaths,

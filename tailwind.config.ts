@@ -8,6 +8,7 @@ const config: Config = {
       colors: {
         paper: "var(--paper)",
         card: "var(--card)",
+        surface: "var(--surface)",
         line: "var(--line)",
         ink: {
           DEFAULT: "var(--ink)",

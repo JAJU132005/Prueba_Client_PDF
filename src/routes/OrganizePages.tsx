@@ -268,7 +268,7 @@ export function OrganizePages(props?: OrganizePagesProps): JSX.Element {
                     handleDrop(position);
                   }}
                   data-testid={`page-${position}`}
-                  className={`relative flex cursor-move flex-col gap-2 border-[2.2px] border-ink bg-white p-2 shadow-doodle transition ${
+                  className={`relative flex cursor-move flex-col gap-2 border-[2.2px] border-ink bg-surface p-2 shadow-doodle transition ${
                     position % 2 === 0 ? "-rotate-1" : "rotate-1"
                   } ${item.removed ? "opacity-50" : ""}`}
                 >

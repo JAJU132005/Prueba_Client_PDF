@@ -32,6 +32,7 @@ import {
   type ToolSettings,
 } from "@/pdf/annotationInteraction";
 import { ANNOTATION_TOOLS, type AnnotationTool } from "@/pdf/annotationModel";
+import { deriveEditorGeometry } from "@/pdf/editorScale";
 import type { PageSelectionState } from "@/pdf/pageSelection";
 import type { PageRasterizer, PageRasterizerFactory } from "@/pdf/rasterize";
 
@@ -83,6 +84,10 @@ export interface AnnotationEditorProps {
   settings: ToolSettings;
   /** Cambia los ajustes de estilo. (R1) */
   onSettingsChange: (settings: ToolSettings) => void;
+  /** Inicio de un gesto de mover/redimensionar (para coalescing del undo). (#37 R32) */
+  onGestureStart?: () => void;
+  /** Fin de un gesto de mover/redimensionar (sella la entrada de undo). (#37 R32) */
+  onGestureEnd?: () => void;
   /** Bytes de la imagen cargada para la herramienta de imagen (o null). */
   imageData?: Uint8Array | null;
   /** Escala de render de la página; por defecto 1 (1 punto PDF = 1 px). */
@@ -168,6 +173,8 @@ export function AnnotationEditor({
   onSelectionChange,
   settings,
   onSettingsChange,
+  onGestureStart,
+  onGestureEnd,
   imageData,
   scale = 1,
   createId,
@@ -176,9 +183,18 @@ export function AnnotationEditor({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(0);
-  const [viewSize, setViewSize] = useState<{ width: number; height: number } | null>(
-    null,
-  );
+  // Tamaño MOSTRADO de la página (px de vista), medido inicialmente por
+  // getBoundingClientRect y recalculado por un ResizeObserver ante reflow. (R2)
+  const [displaySize, setDisplaySize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  // Tamaño NATURAL de la imagen rasterizada (px), reportado por `onLoad`. Con él
+  // se deriva el ancho/alto real de la página en puntos PDF. (R1, R3)
+  const [naturalSize, setNaturalSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   const [imageObjectUrls, setImageObjectUrls] = useState<Record<string, string>>(
@@ -189,6 +205,7 @@ export function AnnotationEditor({
   const renderAbortRef = useRef<AbortController | null>(null);
   const imageUrlRef = useRef<string | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const gestureRef = useRef<SelectionGesture>(null);
   const idFactoryRef = useRef<() => string>(createId ?? defaultIdFactory());
   if (createId) {
@@ -205,7 +222,22 @@ export function AnnotationEditor({
     [annotations, activePageIndex],
   );
 
-  const pageHeightPts = viewSize ? viewSize.height / scale : 0;
+  // `scale` es la escala de RENDER (rasterización). La escala de VISUALIZACIÓN
+  // real (px mostrados por punto PDF) y la altura real de la página se derivan de
+  // la geometría observada, no se asume 1 px = 1 pt. (R1, R3, R4)
+  const geometry = useMemo(
+    () =>
+      deriveEditorGeometry({
+        naturalWidth: naturalSize?.width ?? 0,
+        naturalHeight: naturalSize?.height ?? 0,
+        displayedWidth: displaySize?.width ?? 0,
+        displayedHeight: displaySize?.height ?? 0,
+        renderScale: scale,
+      }),
+    [naturalSize, displaySize, scale],
+  );
+  const displayScale = geometry?.scale ?? scale;
+  const pageHeightPts = geometry?.pageHeightPts ?? 0;
 
   // --- Carga del documento y rasterización del fondo (intacto respecto a #23) ---
   useEffect(() => {
@@ -288,21 +320,43 @@ export function AnnotationEditor({
     };
   }, [activePageIndex, scale, ready]);
 
-  // Mide el tamaño mostrado de la página para derivar la geometría de la capa
-  // SVG (px de vista = pts · escala). (R28)
+  // Medición inicial del tamaño MOSTRADO de la página para derivar la geometría
+  // de la capa SVG. El ResizeObserver la mantiene al día ante reflow. (R2)
   useLayoutEffect(() => {
     const el = overlayRef.current;
     if (imageUrl && el) {
       const rect = el.getBoundingClientRect();
-      setViewSize({ width: rect.width, height: rect.height });
+      setDisplaySize({ width: rect.width, height: rect.height });
     }
   }, [imageUrl, scale, activePageIndex]);
 
-  // Cierra el campo de texto al cambiar de página o herramienta de creación.
+  // Recalcula el tamaño mostrado cuando el contenedor hace reflow (la <img> se
+  // encoge por CSS): sin esto la escala de visualización se quedaría obsoleta. (R2)
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const rect = entry.contentRect;
+        if (rect.width > 0 && rect.height > 0) {
+          setDisplaySize({ width: rect.width, height: rect.height });
+        }
+      }
+    });
+    observer.observe(img);
+    return () => {
+      observer.disconnect();
+    };
+  }, [imageUrl]);
+
+  // Cierra el borrador de texto/forma al cambiar de página O de herramienta, para
+  // que un borrador abierto no bloquee las demás herramientas. (R6, R7)
   useEffect(() => {
     setTextDraft(null);
     setDraft(null);
-  }, [activePageIndex]);
+  }, [activePageIndex, activeTool]);
 
   // Object URLs por anotación de imagen para renderizarlas en la capa SVG.
   useEffect(() => {
@@ -330,12 +384,14 @@ export function AnnotationEditor({
   }
 
   // --- Conversión de coordenadas (única fuente, R28) ---
+  // Usa la escala de VISUALIZACIÓN derivada (px mostrados por punto PDF), no la
+  // escala de render asumida `1`. (R4)
   function toPdf(pxX: number, pxY: number): PdfPoint {
-    return canvasPointToPdf(pxX, pxY, pageHeightPts, scale);
+    return canvasPointToPdf(pxX, pxY, pageHeightPts, displayScale);
   }
 
   function toPx(point: PdfPoint): { left: number; top: number } {
-    return pdfPointToCanvas(point, pageHeightPts, scale);
+    return pdfPointToCanvas(point, pageHeightPts, displayScale);
   }
 
   function pointFromClient(clientX: number, clientY: number): PdfPoint {
@@ -365,7 +421,7 @@ export function AnnotationEditor({
   }
 
   function handleAt(a: Annotation, pdf: PdfPoint): ResizeHandle | null {
-    const tolerance = HANDLE_HIT_PX / scale;
+    const tolerance = HANDLE_HIT_PX / displayScale;
     for (const { handle, point } of handlePositions(a)) {
       if (Math.hypot(point.x - pdf.x, point.y - pdf.y) <= tolerance) {
         return handle;
@@ -405,6 +461,7 @@ export function AnnotationEditor({
         const handle = handleAt(selected, pdf);
         if (handle) {
           gestureRef.current = { type: "resize", original: selected, handle };
+          onGestureStart?.(); // (#37 R32)
           return;
         }
       }
@@ -414,6 +471,7 @@ export function AnnotationEditor({
           onSelectionChange(hit.id);
         }
         gestureRef.current = { type: "move", original: hit, start: pdf };
+        onGestureStart?.(); // (#37 R32)
       } else {
         gestureRef.current = { type: "deselect" };
       }
@@ -458,6 +516,8 @@ export function AnnotationEditor({
       gestureRef.current = null;
       if (gesture?.type === "deselect") {
         onSelectionChange(null);
+      } else if (gesture?.type === "move" || gesture?.type === "resize") {
+        onGestureEnd?.(); // (#37 R32)
       }
     },
   });
@@ -474,16 +534,16 @@ export function AnnotationEditor({
     }
     if (activeTool === "image") {
       if (!imageData) {
+        // Sin imagen cargada NO se crea anotación; el aviso visible (R11) queda
+        // como retroalimentación en lugar de fallar en silencio. (R12)
         return;
       }
-      onAddAnnotation(
-        createImageAnnotation(
-          idFactoryRef.current(),
-          activePageIndex,
-          pdf,
-          imageData,
-        ),
-      );
+      const id = idFactoryRef.current();
+      onAddAnnotation(createImageAnnotation(id, activePageIndex, pdf, imageData));
+      // Vuelve a modo selección para poder mover/redimensionar/eliminar la imagen
+      // recién colocada; la selección la fija `addAnnotation`. (R9, R10)
+      onSelectionChange(id);
+      onToolChange(null);
     }
   }
 
@@ -530,6 +590,9 @@ export function AnnotationEditor({
       );
       if (created) {
         onAddAnnotation(created); // (R4)
+        // Tras colocar por clic un texto con contenido, vuelve a modo selección
+        // para poder mover/redimensionar/eliminar la anotación. (R8, R10)
+        onToolChange(null);
       }
     }
     setTextDraft(null);
@@ -564,6 +627,18 @@ export function AnnotationEditor({
           </button>
         ))}
       </div>
+
+      {/* Feedback herramienta Imagen sin imagen cargada: no es un no-op silencioso.
+          (R11) */}
+      {activeTool === "image" && !imageData && (
+        <div
+          role="alert"
+          data-testid="image-tool-notice"
+          className="rounded-xl border border-mk-orange/50 bg-hl-orange/40 px-3 py-2 text-sm text-ink"
+        >
+          Carga una imagen (JPG o PNG) para usar la herramienta de imagen.
+        </div>
+      )}
 
       {/* Barra de ajustes de estilo (R1, R2) */}
       <div
@@ -650,9 +725,19 @@ export function AnnotationEditor({
           {imageUrl && (
             <div className="relative">
               <img
+                ref={imgRef}
                 src={imageUrl}
                 alt={`Página ${String(activePageIndex + 1)} para anotar`}
                 className="block max-w-full"
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                    setNaturalSize({
+                      width: img.naturalWidth,
+                      height: img.naturalHeight,
+                    });
+                  }
+                }}
               />
               {/* Capa interactiva + SVG fiel (R27, R28) */}
               <div
@@ -669,13 +754,13 @@ export function AnnotationEditor({
                 className="absolute inset-0 outline-none"
                 style={{ cursor: activeTool ? "crosshair" : "default" }}
               >
-                {viewSize && (
+                {displaySize && (
                   <svg
                     data-testid="annotation-layer"
-                    width={viewSize.width}
-                    height={viewSize.height}
-                    viewBox={`0 0 ${String(viewSize.width)} ${String(
-                      viewSize.height,
+                    width={displaySize.width}
+                    height={displaySize.height}
+                    viewBox={`0 0 ${String(displaySize.width)} ${String(
+                      displaySize.height,
                     )}`}
                     className="pointer-events-none absolute inset-0"
                   >
@@ -684,7 +769,7 @@ export function AnnotationEditor({
                         key={annotation.id}
                         annotation={annotation}
                         toPx={toPx}
-                        scale={scale}
+                        scale={displayScale}
                         imageUrl={imageObjectUrls[annotation.id]}
                         selected={annotation.id === selectedId}
                       />
@@ -693,7 +778,7 @@ export function AnnotationEditor({
                       <DraftShape
                         draft={draft}
                         toPx={toPx}
-                        scale={scale}
+                        scale={displayScale}
                         settings={settings}
                       />
                     )}
@@ -706,7 +791,7 @@ export function AnnotationEditor({
                     )}
                   </svg>
                 )}
-                {textDraft && viewSize && (
+                {textDraft && displaySize && (
                   <textarea
                     data-testid="annotation-text-input"
                     aria-label="Contenido del texto"
@@ -729,9 +814,9 @@ export function AnnotationEditor({
                     style={{
                       left: `${String(toPx(textDraft.at).left)}px`,
                       top: `${String(
-                        toPx(textDraft.at).top - settings.fontSize * scale,
+                        toPx(textDraft.at).top - settings.fontSize * displayScale,
                       )}px`,
-                      fontSize: `${String(settings.fontSize * scale)}px`,
+                      fontSize: `${String(settings.fontSize * displayScale)}px`,
                     }}
                   />
                 )}

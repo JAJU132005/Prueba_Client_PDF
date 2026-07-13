@@ -28,7 +28,6 @@ const EXPECTED_CLASSIFICATION: Record<string, ResourceCost> = {
   "fill-forms": "medium",
   ocr: "heavy",
   redact: "medium",
-  "sign-free": "medium",
 };
 
 describe("resourceCost — tablas de presentación (R4, R5, R8)", () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { ImagePreviewModal } from "@/components/ImagePreviewModal";
 import { PdfPreviewModal } from "@/components/PdfPreviewModal";
 import { formatBytes } from "@/lib/formatBytes";
 import { moveItem, removeItem } from "@/lib/fileList";
@@ -8,8 +9,10 @@ import {
   type FileValidationConfig,
   type RejectedFile,
 } from "@/lib/fileValidation";
+import { isImageFile } from "@/lib/imageFileTypes";
 import { createPdfjsPageRasterizer } from "@/lib/pdfjsPageRasterizer";
 import { pdfjsPageCount } from "@/lib/pdfjsPageCounter";
+import { renderPdfThumbnailUrl } from "@/lib/pdfThumbnail";
 import {
   countPdfPages,
   formatPageCount,
@@ -21,10 +24,63 @@ import type { PageRasterizerFactory } from "@/pdf/rasterize";
 /** Estado de conteo por archivo: en curso o resultado final. */
 type PageCountState = PageCountResult | { status: "counting" };
 
+/**
+ * Estado de la miniatura por archivo: generándose, lista (con su object URL) o
+ * no disponible (fallo de rasterizado del PDF). (R15, R20)
+ */
+type ThumbnailState =
+  | { status: "loading" }
+  | { status: "ready"; url: string }
+  | { status: "unavailable" };
+
 /** ¿El archivo es un PDF (por extensión o MIME)? Solo estos se cuentan. (R17) */
 function isPdfFile(file: File): boolean {
   return (
     file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+  );
+}
+
+/**
+ * Miniatura de la fila junto al conteo:
+ * - sin estado (archivo sin miniatura) → nada,
+ * - `"loading"` → placeholder de carga accesible (R15),
+ * - `"ready"` → `<img>` con la object URL local (R12, R13),
+ * - `"unavailable"` → marcador neutro (R20).
+ */
+function renderThumbnail(
+  file: File,
+  state: ThumbnailState | undefined,
+): JSX.Element | null {
+  if (!state) {
+    return null;
+  }
+  if (state.status === "loading") {
+    return (
+      <span
+        className="mono soft flex h-10 w-10 items-center justify-center text-xs"
+        aria-label={`Generando miniatura de ${file.name}`}
+      >
+        …
+      </span>
+    );
+  }
+  if (state.status === "ready") {
+    return (
+      <img
+        src={state.url}
+        alt={`Miniatura de ${file.name}`}
+        className="h-10 w-10 rounded border-[2px] border-ink object-cover"
+      />
+    );
+  }
+  // "unavailable": marcador neutro, sin romper la fila. (R20)
+  return (
+    <span
+      className="mono soft flex h-10 w-10 items-center justify-center text-lg"
+      aria-hidden="true"
+    >
+      🗎
+    </span>
   );
 }
 
@@ -115,6 +171,30 @@ export function Dropzone({
   const countPagesRef = useRef(countPages);
   countPagesRef.current = countPages;
 
+  // Estado de miniatura por archivo (clave = referencia del `File`). (R12–R15)
+  const [thumbnails, setThumbnails] = useState<Map<File, ThumbnailState>>(
+    () => new Map(),
+  );
+  // Un `AbortController` por miniatura PDF en curso, para cancelarla. (R17)
+  const thumbControllersRef = useRef<Map<File, AbortController>>(new Map());
+  // Object URLs vivas de miniaturas, para revocarlas al quitar/desmontar. (R18)
+  const thumbUrlsRef = useRef<Map<File, string>>(new Map());
+  // Último `createRasterizer` recibido, sin reiniciar el efecto al cambiar prop.
+  const createRasterizerRef = useRef(createRasterizer);
+  createRasterizerRef.current = createRasterizer;
+
+  // Actualiza la miniatura de un archivo solo si sigue trazado. (R17, R18)
+  function applyThumbnail(file: File, state: ThumbnailState): void {
+    setThumbnails((prev) => {
+      if (!prev.has(file)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(file, state);
+      return next;
+    });
+  }
+
   // Actualiza el resultado de un archivo solo si sigue trazado. (R14b, R15)
   function applyResult(file: File, result: PageCountResult): void {
     setPageCounts((prev) => {
@@ -192,6 +272,110 @@ export function Dropzone({
         controller.abort();
       }
       controllers.clear();
+    };
+  }, []);
+
+  // Genera/cancela miniaturas al cambiar la lista. Imagen → object URL local;
+  // PDF → rasteriza SOLO la página 1 de forma asíncrona y cancelable. (R12–R20)
+  useEffect(() => {
+    const present = new Set(files);
+    const controllers = thumbControllersRef.current;
+    const urls = thumbUrlsRef.current;
+
+    // Archivos quitados/reemplazados: abortar su generación y revocar su URL. (R17, R18)
+    for (const [file, controller] of controllers) {
+      if (!present.has(file)) {
+        controller.abort();
+        controllers.delete(file);
+      }
+    }
+    for (const [file, url] of urls) {
+      if (!present.has(file)) {
+        URL.revokeObjectURL(url);
+        urls.delete(file);
+      }
+    }
+    setThumbnails((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const file of prev.keys()) {
+        if (!present.has(file)) {
+          next.delete(file);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    // Archivos nuevos: generar su miniatura una sola vez. Un archivo ya tratado
+    // tiene controlador (PDF) u object URL (imagen); se salta.
+    for (const file of files) {
+      if (controllers.has(file) || urls.has(file)) {
+        continue;
+      }
+      if (isImageFile(file)) {
+        // Imagen: object URL local inmediata; sin red. (R12, R19)
+        const url = URL.createObjectURL(file);
+        urls.set(file, url);
+        setThumbnails((prev) =>
+          new Map(prev).set(file, { status: "ready", url }),
+        );
+        continue;
+      }
+      if (!isPdfFile(file)) {
+        continue;
+      }
+      // PDF: miniatura de la página 1, asíncrona y cancelable. (R13, R14, R16)
+      const controller = new AbortController();
+      controllers.set(file, controller);
+      setThumbnails((prev) => new Map(prev).set(file, { status: "loading" }));
+
+      void (async (): Promise<void> => {
+        let bytes: Uint8Array;
+        try {
+          bytes = new Uint8Array(await file.arrayBuffer());
+        } catch {
+          if (!controller.signal.aborted) {
+            applyThumbnail(file, { status: "unavailable" });
+          }
+          return;
+        }
+        try {
+          const url = await renderPdfThumbnailUrl(
+            bytes,
+            createRasterizerRef.current,
+            controller.signal,
+          );
+          if (controller.signal.aborted) {
+            // La generación fue cancelada tras crear la URL: revocarla. (R17, R18)
+            URL.revokeObjectURL(url);
+            return;
+          }
+          urls.set(file, url);
+          applyThumbnail(file, { status: "ready", url });
+        } catch {
+          // Rasterizado fallido o abortado: no disponible, sin propagar. (R20)
+          if (!controller.signal.aborted) {
+            applyThumbnail(file, { status: "unavailable" });
+          }
+        }
+      })();
+    }
+  }, [files]);
+
+  // Al desmontar: abortar todas las miniaturas y revocar todas sus URLs. (R18)
+  useEffect(() => {
+    const controllers = thumbControllersRef.current;
+    const urls = thumbUrlsRef.current;
+    return () => {
+      for (const controller of controllers.values()) {
+        controller.abort();
+      }
+      controllers.clear();
+      for (const url of urls.values()) {
+        URL.revokeObjectURL(url);
+      }
+      urls.clear();
     };
   }, []);
 
@@ -274,15 +458,17 @@ export function Dropzone({
               key={`${file.name}-${index}`}
               className={`filerow ${index % 2 === 0 ? "-rotate-[0.5deg]" : "rotate-[0.6deg]"}`}
             >
-              <span className="scrawl" aria-hidden="true">
-                🗎
-              </span>
+              {renderThumbnail(file, thumbnails.get(file)) ?? (
+                <span className="scrawl" aria-hidden="true">
+                  🗎
+                </span>
+              )}
               <span className="hand flex-1 truncate text-[19px] text-ink">
                 {file.name}
               </span>
               <span className="mono soft text-xs">{formatBytes(file.size)}</span>
               {renderPageCount(pageCounts.get(file))}
-              {isPdfFile(file) && (
+              {(isPdfFile(file) || isImageFile(file)) && (
                 <button
                   type="button"
                   onClick={() => setPreviewFile(file)}
@@ -338,13 +524,19 @@ export function Dropzone({
         </div>
       )}
 
-      {previewFile && (
-        <PdfPreviewModal
-          file={previewFile}
-          onClose={() => setPreviewFile(null)}
-          createRasterizer={createRasterizer}
-        />
-      )}
+      {previewFile &&
+        (isPdfFile(previewFile) ? (
+          <PdfPreviewModal
+            file={previewFile}
+            onClose={() => setPreviewFile(null)}
+            createRasterizer={createRasterizer}
+          />
+        ) : (
+          <ImagePreviewModal
+            file={previewFile}
+            onClose={() => setPreviewFile(null)}
+          />
+        ))}
     </div>
   );
 }

@@ -12,7 +12,6 @@ import type { PageNumbersOptions } from "@/pdf/pageNumbers";
 import type { ProtectOptions } from "@/pdf/protectPdf";
 import type { RedactedPageImage } from "@/pdf/redact";
 import type { RotateOptions } from "@/pdf/rotateOptions";
-import type { SignOptions } from "@/pdf/signature";
 import type { ProgressCallback } from "@/pdf/types";
 import type { WatermarkOptions } from "@/pdf/watermark";
 import type {
@@ -119,16 +118,6 @@ export interface PdfClient {
     onProgress?: ProgressCallback,
   ): Promise<Uint8Array>;
   /**
-   * Coloca la imagen de firma de `options` en `input` (firma visual) y devuelve
-   * los bytes. La lógica corre en el worker; aquí solo se transporta la llamada.
-   * (R11)
-   */
-  sign(
-    input: Uint8Array,
-    options: SignOptions,
-    onProgress?: ProgressCallback,
-  ): Promise<Uint8Array>;
-  /**
    * Detecta los campos AcroForm de `input` y devuelve el modelo del formulario.
    * La lógica corre en el worker; aquí solo se transporta la llamada. (R17, R18)
    */
@@ -191,7 +180,6 @@ const PDF_WORKER_ERROR_NAMES = new Set<string>([
   "IncorrectPasswordError",
   "ProtectFailedError",
   "AnnotateFailedError",
-  "SignFailedError",
   "FillFormFailedError",
   "OcrFailedError",
   "RedactFailedError",
@@ -298,14 +286,6 @@ export function createPdfClient(injectedApi?: PdfWorkerApi): PdfClient {
         try {
           // Rama inyectada (tests): el callback se pasa directo, sin Comlink.
           return await injectedApi.annotate(input, annotations, onProgress);
-        } catch (error) {
-          throw error;
-        }
-      },
-      async sign(input, options, onProgress) {
-        try {
-          // Rama inyectada (tests): el callback se pasa directo, sin Comlink.
-          return await injectedApi.sign(input, options, onProgress);
         } catch (error) {
           throw error;
         }
@@ -489,19 +469,6 @@ export function createPdfClient(injectedApi?: PdfWorkerApi): PdfClient {
         return await remote.annotate(
           input,
           annotations,
-          onProgress ? Comlink.proxy(onProgress) : undefined,
-        );
-      } catch (error) {
-        throw error;
-      }
-    },
-    async sign(input, options, onProgress) {
-      try {
-        // El aplanado pesado (pdf-lib) corre en el worker; el callback de
-        // progreso cruza el límite vía Comlink.proxy. (R11)
-        return await remote.sign(
-          input,
-          options,
           onProgress ? Comlink.proxy(onProgress) : undefined,
         );
       } catch (error) {

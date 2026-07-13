@@ -111,6 +111,55 @@ describe("buildWatermarkOverlay — imagen (R5)", () => {
   });
 });
 
+describe("buildWatermarkOverlay — opciones sin `image` (#42 R4b, R5)", () => {
+  it("produce un PreviewOverlay válido cuando las opciones NO llevan `image` (#42 R4b)", () => {
+    // Objeto de opciones sin la propiedad `image` (como el memo de la vista
+    // previa tras eliminar el dato muerto `image: null`).
+    const options: Omit<WatermarkOptions, "image"> = {
+      mode: "text",
+      text: "CONFIDENCIAL",
+      position: "center",
+      opacity: 0.3,
+      angle: 45,
+      fontSize: 48,
+      pages: "all",
+    };
+    const overlay = buildWatermarkOverlay(options, PAGE, {
+      width: 200,
+      height: 48,
+    });
+    expect(Number.isFinite(overlay.x)).toBe(true);
+    expect(Number.isFinite(overlay.y)).toBe(true);
+    expect(overlay.width).toBe(200);
+    expect(overlay.height).toBe(48);
+    expect(overlay.opacity).toBe(0.3);
+    expect(overlay.rotationDegrees).toBe(45);
+    expect(overlay.content).toEqual({
+      kind: "text",
+      text: "CONFIDENCIAL",
+      fontSize: 48,
+    });
+  });
+
+  it("el overlay es idéntico con y sin la propiedad `image` (#42 R5)", () => {
+    const withImage = textWatermarkOptions({ position: "top-right" });
+    // Misma opción sin `image` (el resto de campos idénticos).
+    const withoutImage: Omit<WatermarkOptions, "image"> = {
+      mode: withImage.mode,
+      text: withImage.text,
+      position: withImage.position,
+      opacity: withImage.opacity,
+      angle: withImage.angle,
+      fontSize: withImage.fontSize,
+      pages: withImage.pages,
+    };
+    const content = { width: 200, height: 48 };
+    const overlayWith = buildWatermarkOverlay(withImage, PAGE, content);
+    const overlayWithout = buildWatermarkOverlay(withoutImage, PAGE, content);
+    expect(overlayWithout).toEqual(overlayWith);
+  });
+});
+
 describe("buildPageNumbersOverlay (R6, R7)", () => {
   const options: PageNumbersOptions = {
     position: "bottom-right",

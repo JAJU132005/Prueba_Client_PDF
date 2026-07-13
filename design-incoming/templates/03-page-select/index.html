@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plantilla 03-page-select — Dividir PDF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Gochi+Hand&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens/tokens.css">
+<script src="../../shared/panda-art.js" defer></script>
+<script src="../../shared/panda-widget.js" defer></script>
+<style>
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+  .estado { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); letter-spacing: .08em; text-transform: uppercase; margin: 40px 0 10px; }
+  .pagegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 14px; max-width: 720px; }
+</style>
+</head>
+<body>
+
+<header class="wrap" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:20px">
+  <a class="hand" href="../../home/index.html" style="font-size:19px;color:var(--ink);text-decoration:none;box-shadow:inset 0 -8px 0 var(--hl-green)">← volver al cuaderno</a>
+  <div style="flex:1"></div>
+  <span class="badge lv-ligera">✓ 100% local</span>
+</header>
+
+<main class="wrap" style="padding-bottom:40px">
+  <p class="mono soft" style="margin:24px 0 0;font-size:12px">PLANTILLA 03-PAGE-SELECT · 1 archivo + rejilla de miniaturas protagonista · herramientas: Dividir (/split), Organizar (/organize), PDF a imágenes (/pdf-to-images)</p>
+
+  <!-- Representativa: Dividir -->
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px">
+    <span class="scrawl" style="font-size:24px;display:grid;place-items:center;width:56px;height:56px;border:2.5px dashed var(--ink);border-radius:60% 40% 55% 45%/45% 55% 40% 60%;background:var(--hl-green)">✂</span>
+    <h1 class="hand" style="margin:0;font-size:clamp(32px,4vw,46px)"><span class="hl-ligera">Dividir PDF</span></h1>
+    <span class="badge lv-ligera">Ligera · Pan comido</span>
+  </div>
+  <div style="margin-top:6px;display:flex;align-items:center;gap:12px">
+    <panda-art kind="pose-ligera" style="width:72px"></panda-art>
+    <p class="hand soft" style="margin:0;font-size:17px">Tu dispositivo ni se despeina.</p>
+  </div>
+
+  <div class="card" style="margin-top:22px;max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-ligera">Tijeras y línea punteada</span> <span class="scrawl soft" style="font-size:20px">✂ ¡RAS!</span></h2>
+    <panda-art kind="dividir" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+    <p class="hand soft" style="margin:10px 0 0;font-size:16px">Rango inválido → el panda se rasca la cabeza y el mensaje de error real va en bocadillo de cómic.</p>
+  </div>
+
+  <p class="estado">estado 1 · dropzone simple + archivo con nº de páginas</p>
+  <div class="filerow" style="max-width:640px;transform:rotate(-.4deg)">
+    <span class="scrawl">🗎</span><span class="hand" style="font-size:19px">fotos-del-viaje.pdf</span>
+    <span class="mono soft" style="font-size:12px">6,2 MB · 12 páginas</span><span style="flex:1"></span>
+    <button class="btn" type="button" style="font-size:16px;padding:3px 12px">Vista previa</button>
+  </div>
+
+  <p class="estado">estado 2 · RangeSelector: casillas de cuaderno con ✓ de marcador</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+    <button class="btn" type="button">Todas</button>
+    <button class="btn" type="button">Pares</button>
+    <button class="btn" type="button">Impares</button>
+    <button class="btn" type="button">Invertir</button>
+    <button class="btn btn-ghost" type="button">Ninguna</button>
+    <span class="mono soft" style="align-self:center;font-size:12px">rango canónico: 1,2,5</span>
+  </div>
+  <div class="pagegrid">
+    <button class="pagecell" type="button" aria-pressed="true">1<span class="check">✓</span></button>
+    <button class="pagecell" type="button" aria-pressed="true">2<span class="check">✓</span></button>
+    <button class="pagecell" type="button" aria-pressed="false">3</button>
+    <button class="pagecell" type="button" aria-pressed="false">4</button>
+    <button class="pagecell" type="button" aria-pressed="true">5<span class="check">✓</span></button>
+    <button class="pagecell" type="button" aria-pressed="false">6</button>
+    <button class="pagecell" type="button" aria-pressed="false">7</button>
+    <button class="pagecell" type="button" aria-pressed="false">8</button>
+    <button class="pagecell" type="button" aria-pressed="false">9</button>
+    <button class="pagecell" type="button" aria-pressed="false">10</button>
+    <button class="pagecell" type="button" aria-pressed="false">11</button>
+    <button class="pagecell" type="button" aria-pressed="false">12</button>
+  </div>
+
+  <p class="estado">estado 3 · opciones de corte + acción + resultado</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+    <button class="btn" type="button" aria-pressed="true" style="background:var(--hl-green)">Un PDF con la selección</button>
+    <button class="btn" type="button">Un PDF por rango</button>
+  </div>
+  <button class="btn btn-primary lv-ligera" type="button">Cortar por la línea punteada</button>
+  <div class="card" style="max-width:420px;margin-top:18px">
+    <h3 class="hand" style="margin:0;font-size:24px"><span class="hl-ligera">¡Listo!</span> Recorte limpio.</h3>
+    <panda-art kind="trituradora" style="width:min(240px,100%);margin:8px auto 0"></panda-art>
+    <button class="btn btn-primary lv-ligera" type="button" style="font-size:19px;margin-top:10px">⇩ Descargar resultado</button>
+  </div>
+
+  <!-- Variantes -->
+  <p class="estado">variante · Organizar páginas (/organize) — MEDIA 🟡</p>
+  <div class="card" style="max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-media">El tablón de corcho</span> <span class="scrawl soft" style="font-size:20px">¡PLOP!</span></h2>
+    <panda-art kind="organizar" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+    <ul class="hand" style="margin:12px 0 0;font-size:17px;line-height:1.6;padding-left:22px">
+      <li>Las miniaturas (pdf.js, render asíncrono existente) son polaroids con chinchetas.</li>
+      <li>Drag&amp;drop = despinchar y repinchar la polaroid.</li>
+      <li>Marcar para eliminar = X roja de marcador + polaroid ligeramente arrugada.</li>
+      <li>Al exportar, el panda ordena la caja de fotos y la cierra.</li>
+    </ul>
+  </div>
+
+  <p class="estado">variante · PDF a imágenes (/pdf-to-images) — MEDIA 🟡</p>
+  <div class="card" style="max-width:640px">
+    <h2 class="hand" style="margin:0;font-size:27px"><span class="hl-media">El panda fotógrafo</span> <span class="scrawl soft" style="font-size:20px">¡FLASH!</span></h2>
+    <panda-art kind="pdf-a-imagenes" style="width:min(360px,100%);margin:10px auto 0"></panda-art>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn" type="button" aria-pressed="true" style="background:var(--hl-orange)">PNG</button>
+      <button class="btn" type="button">JPG</button>
+      <span style="width:14px"></span>
+      <button class="btn" type="button">1×</button>
+      <button class="btn" type="button" aria-pressed="true" style="background:var(--hl-orange)">2×</button>
+      <button class="btn" type="button">3×</button>
+    </div>
+    <p class="hand" style="margin:12px 0 0;font-size:17px">Formato/resolución = ruedecitas de la cámara. Cada página procesada sale como polaroid que se revela (thumbnail al terminar el worker). El ZIP es una caja de zapatos etiquetada a mano.</p>
+  </div>
+
+  <p class="estado">notas para el implementer</p>
+  <div class="postit" style="max-width:560px;transform:rotate(-1deg)">
+    Compartidos: Dropzone, PageCountBadge, PreviewModal, RangeSelector (dividir/pdf-a-imágenes),
+    rejilla de miniaturas con drag-reorder (organizar), ProgressBar, ResultPanel (zip en pdf-a-imágenes).
+    Cablear a `split` / `organize` / `pdfToImages` existentes.
+  </div>
+</main>
+
+<panda-widget></panda-widget>
+</body>
+</html>

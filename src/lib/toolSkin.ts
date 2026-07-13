@@ -127,13 +127,6 @@ export const TOOL_SKINS: Record<string, ToolSkin> = {
     onomatopoeia: "shhh…",
     actionLabel: "Redactar y descargar",
   },
-  "sign-free": {
-    scene: "firmar",
-    glyph: "✍",
-    sceneTitle: "Coloca tu autógrafo donde quieras",
-    onomatopoeia: "arrastra ✍",
-    actionLabel: "Firmar PDF",
-  },
 };
 
 /** Piel de una herramienta por su id estable. undefined si no existe. */

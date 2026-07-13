@@ -1,5 +1,6 @@
 import { createWorker, type Worker } from "tesseract.js";
 
+import { createWorkerCache } from "@/lib/ocrWorkerCache";
 import type {
   OcrEngine,
   OcrImageInput,
@@ -25,19 +26,18 @@ const RECOGNIZING_STATUS = "recognizing text";
 /** Callback de progreso activo durante la llamada en curso (una a la vez). */
 let activeOnProgress: ProgressCallback | undefined;
 
-/** Workers cacheados por idioma; se crean bajo demanda con rutas locales. */
-const workersByLanguage = new Map<string, Promise<Worker>>();
-
-function getWorker(language: string): Promise<Worker> {
-  const existing = workersByLanguage.get(language);
-  if (existing) {
-    return existing;
-  }
-  // createWorker configurado con rutas del PROPIO ORIGEN (sin redes externas). (R20)
-  const created = createWorker(language, undefined, {
+/**
+ * Crea un worker de Tesseract.js para `language` con rutas del PROPIO ORIGEN
+ * (sin redes externas, R20) y `gzip: false` para que solicite el fichero PLANO
+ * `<lang>.traineddata` (no `.gz`), coherente con el formato empaquetado (#34 R4).
+ */
+function createLanguageWorker(language: string): Promise<Worker> {
+  return createWorker(language, undefined, {
     workerPath: TESSERACT_WORKER_PATH,
     corePath: TESSERACT_CORE_PATH,
     langPath: TESSERACT_LANG_PATH,
+    // Ficheros de idioma PLANOS: pide `<lang>.traineddata` sin descomprimir. (#34 R4)
+    gzip: false,
     // Progreso REAL: mapea la fracción emitida durante el reconocimiento. (R11)
     logger: (message: { status: string; progress: number }) => {
       if (message.status === RECOGNIZING_STATUS) {
@@ -45,9 +45,14 @@ function getWorker(language: string): Promise<Worker> {
       }
     },
   });
-  workersByLanguage.set(language, created);
-  return created;
 }
+
+/**
+ * Workers cacheados por idioma con DESALOJO-EN-RECHAZO: si la creación de un
+ * idioma falla, su promesa rechazada NO queda cacheada, permitiendo reintentos
+ * (#34 R7, R8a, R8b, R9).
+ */
+const workerCache = createWorkerCache<Worker>(createLanguageWorker);
 
 function toWords(rawWords: unknown): OcrWord[] {
   if (!Array.isArray(rawWords)) {
@@ -83,7 +88,7 @@ export const tesseractOcrEngine: OcrEngine = {
     language: string,
     onProgress?: ProgressCallback,
   ): Promise<OcrPageRecognition> {
-    const worker = await getWorker(language);
+    const worker = await workerCache.get(language);
     activeOnProgress = onProgress;
     try {
       const blob = new Blob([image.bytes as BlobPart], {
@@ -100,8 +105,8 @@ export const tesseractOcrEngine: OcrEngine = {
   },
 
   async terminate(): Promise<void> {
-    const workers = Array.from(workersByLanguage.values());
-    workersByLanguage.clear();
+    const workers = workerCache.values();
+    workerCache.clear();
     await Promise.all(
       workers.map(async (workerPromise) => {
         const worker = await workerPromise;

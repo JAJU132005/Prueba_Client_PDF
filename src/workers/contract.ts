@@ -24,7 +24,6 @@ import type { ProbeInput, ProbeResult } from "@/pdf/probe";
 import type { ProtectOptions } from "@/pdf/protectPdf";
 import type { RedactedPageImage } from "@/pdf/redact";
 import type { RotateOptions } from "@/pdf/rotateOptions";
-import type { SignOptions } from "@/pdf/signature";
 import type { ProgressCallback } from "@/pdf/types";
 import type { WatermarkOptions } from "@/pdf/watermark";
 
@@ -51,7 +50,6 @@ export type {
   ProtectOptions,
   RedactedPageImage,
   RotateOptions,
-  SignOptions,
   WatermarkOptions,
 };
 
@@ -164,17 +162,6 @@ export interface PdfWorkerApi {
   annotate(
     input: Uint8Array,
     annotations: readonly Annotation[],
-    onProgress?: ProgressCallback,
-  ): Promise<Uint8Array>;
-  /**
-   * Coloca (incrusta y aplana) la imagen de firma de `options` en la página y
-   * posición elegidas de `input` y devuelve los bytes. Firma VISUAL, no
-   * criptográfica. El trabajo pesado de pdf-lib corre en el worker; la lógica
-   * vive en `signPdf` (dominio puro). Aquí solo se declara el contrato. (R10)
-   */
-  sign(
-    input: Uint8Array,
-    options: SignOptions,
     onProgress?: ProgressCallback,
   ): Promise<Uint8Array>;
   /**

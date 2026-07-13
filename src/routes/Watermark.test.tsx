@@ -123,9 +123,6 @@ function fakeClient(addWatermark: PdfClient["addWatermark"]): PdfClient {
     async annotate() {
       return new Uint8Array();
     },
-    async sign() {
-      return new Uint8Array();
-    },
     async detectForm() {
       return { hasFields: false, fields: [] };
     },
@@ -441,6 +438,42 @@ describe("Watermark — marcado (R56, R57, R58, R59, R60, R61)", () => {
     expect(
       screen.queryByRole("button", { name: /descargar resultado/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("Watermark — regresión texto→imagen sin recargar (#42 R1, R9)", () => {
+  it("tras aplicar en modo texto y cambiar a imagen, la 2ª llamada usa mode:'image' con image no nula (#42 R1)", async () => {
+    const calls: WatermarkOptions[] = [];
+    const client = fakeClient(async (_input, options) => {
+      calls.push(options);
+      return new Uint8Array([9]);
+    });
+    const { container } = renderAt(client);
+
+    // 1) Cargar PDF y escribir texto.
+    addPdf(container, makePdfFile("a.pdf", [1, 2, 3]));
+    await screen.findByRole("button", { name: "Página 1" });
+    fireEvent.change(screen.getByLabelText("Texto de la marca"), {
+      target: { value: "CONFIDENCIAL" },
+    });
+
+    // 2) Aplicar en modo texto (primera llamada).
+    fireEvent.click(screen.getByRole("button", { name: "Pasar el rodillo" }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].mode).toBe("text");
+
+    // 3) Cambiar a modo imagen y cargar una imagen (sin recargar la página).
+    fireEvent.click(screen.getByRole("button", { name: "Imagen" }));
+    addImage(container, makeImageFile("logo.png", [0x89, 0x50, 0x4e, 0x47]));
+
+    // 4) Aplicar de nuevo (segunda llamada): DEBE usar la imagen, no el texto.
+    fireEvent.click(screen.getByRole("button", { name: "Pasar el rodillo" }));
+    await waitFor(() => expect(calls).toHaveLength(2));
+
+    const second = calls[1];
+    expect(second.mode).toBe("image");
+    expect(second.image).not.toBeNull();
+    expect(second.image?.byteLength).toBeGreaterThan(0);
   });
 });
 

@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { DownloadCta } from "@/components/DownloadCta";
 import { Dropzone } from "@/components/Dropzone";
 import { ErrorBubble } from "@/components/ErrorBubble";
 import { ProgressBar } from "@/components/ProgressBar";
 import { ToolPageHeader } from "@/components/ToolPageHeader";
+import { UndoControls } from "@/components/UndoControls";
 import { downloadBlob, pdfBytesToBlob } from "@/lib/download";
+import { useUndoableState } from "@/lib/useUndoableState";
+import { useUndoKeybinding } from "@/lib/useUndoKeybinding";
 import {
   DEFAULT_MAX_FILE_BYTES,
   type FileValidationConfig,
@@ -27,6 +31,7 @@ import {
   updateBox,
   type BoxHandle,
   type RedactBox,
+  type RedactBoxState,
 } from "@/pdf/redactBoxModel";
 import {
   normalizedBoxFromCanvas,
@@ -136,13 +141,17 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
   const [files, setFiles] = useState<File[]>([]);
   const [pageCount, setPageCount] = useState(0);
   const [activePage, setActivePage] = useState(0);
-  const [boxState, setBoxState] = useState(createBoxState);
+  // Estado de cajas versionado con historial de deshacer (#37 R30).
+  const history = useUndoableState<RedactBoxState>(createBoxState());
+  const boxState = history.present;
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [draft, setDraft] = useState<NormalizedBox | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [ready, setReady] = useState(0);
+  // Blob del PDF redactado, listo para la descarga click-driven (#39 R10, R16).
+  const [resultBlob, setResultBlob] = useState<Blob | null>(null);
 
   // Estado de la búsqueda de texto.
   const [query, setQuery] = useState("");
@@ -155,6 +164,14 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
   const imageUrlRef = useRef<string | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
+
+  // Atajo Ctrl+Z / Ctrl+Shift+Z; con foco en el input de búsqueda se ignora (R20).
+  // (#37 R30, R31)
+  useUndoKeybinding({
+    onUndo: history.undo,
+    onRedo: history.redo,
+    enabled: files.length > 0 && pageCount > 0,
+  });
 
   // Carga del documento al montar / cambiar el archivo: lee los bytes locales
   // (sin red) y crea el rasterizador reutilizado para preview y export.
@@ -248,11 +265,12 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
     setStatus("idle");
     setProgress(0);
     setErrorMessage(null);
+    setResultBlob(null);
   }
 
   function handleFilesChange(next: File[]): void {
     setFiles(next);
-    setBoxState(createBoxState());
+    history.reset(createBoxState()); // (#37 R33)
     setActivePage(0);
     setPageCount(0);
     setDraft(null);
@@ -298,7 +316,9 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
       y: m.ny,
     });
     if (hit) {
-      setBoxState((s) => selectBox(s, hit.id));
+      // Selección no versionada (R34) + inicio del gesto de mover (coalescido).
+      history.replace((s) => selectBox(s, hit.id));
+      history.beginGesture(); // (#37 R32)
       gestureRef.current = {
         mode: "move",
         startNorm: { x: m.nx, y: m.ny },
@@ -308,7 +328,7 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
       return;
     }
     // Zona vacía: deselecciona y comienza a dibujar una caja nueva.
-    setBoxState((s) => selectBox(s, null));
+    history.replace((s) => selectBox(s, null)); // (#37 R34)
     gestureRef.current = { mode: "draw", start: { x: m.px, y: m.py } };
     setDraft(null);
   }
@@ -319,7 +339,8 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
   ): (event: React.MouseEvent<HTMLDivElement>) => void {
     return (event) => {
       event.stopPropagation();
-      setBoxState((s) => selectBox(s, box.id));
+      history.replace((s) => selectBox(s, box.id)); // (#37 R34)
+      history.beginGesture(); // (#37 R32)
       gestureRef.current = { mode: "resize", handle, orig: box };
       setDraft(null);
     };
@@ -346,9 +367,10 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
     } else if (g.mode === "move") {
       const dx = m.nx - g.startNorm.x;
       const dy = m.ny - g.startNorm.y;
-      setBoxState((s) => updateBox(s, moveBox(g.orig, dx, dy))); // (R13, R16)
+      // Gesto continuo → transitorio, coalescido en UNA entrada. (#37 R32)
+      history.updateGesture((s) => updateBox(s, moveBox(g.orig, dx, dy))); // (R13, R16)
     } else {
-      setBoxState((s) =>
+      history.updateGesture((s) =>
         updateBox(s, resizeBox(g.orig, g.handle, { x: m.nx, y: m.ny })),
       ); // (R14, R15, R16)
     }
@@ -360,7 +382,11 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
     const g = gestureRef.current;
     gestureRef.current = null;
     setDraft(null);
-    if (!g || g.mode !== "draw") {
+    if (!g) {
+      return;
+    }
+    if (g.mode === "move" || g.mode === "resize") {
+      history.endGesture(); // sella el gesto en UNA entrada (#37 R32)
       return;
     }
     const m = overlayMetrics(event);
@@ -373,14 +399,12 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
       activePage,
     );
     if (box.width > 0 && box.height > 0) {
-      setBoxState((s) =>
-        addBox(s, { ...box, id: newId(), source: "manual" }),
-      );
+      history.set((s) => addBox(s, { ...box, id: newId(), source: "manual" })); // (#37 R30)
     }
   }
 
   function handleRemoveBox(id: string): void {
-    setBoxState((s) => removeBox(s, id)); // (R17)
+    history.set((s) => removeBox(s, id)); // (R17, #37 R30)
   }
 
   async function handleSearch(): Promise<void> {
@@ -408,14 +432,14 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
 
   /** Añade la caja de una coincidencia al conjunto (source: "search"). (R7) */
   function markMatch(match: TextMatch): void {
-    setBoxState((s) =>
+    history.set((s) =>
       addBox(s, { ...match.box, id: newId(), source: "search" }),
-    );
+    ); // (#37 R30)
   }
 
   /** Añade la caja de TODAS las coincidencias (acción masiva). (R8) */
   function markAllMatches(): void {
-    setBoxState((s) => {
+    history.set((s) => {
       let next = s;
       for (const match of matches) {
         next = addBox(next, {
@@ -425,7 +449,7 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
         });
       }
       return next;
-    });
+    }); // (#37 R30)
   }
 
   const pageBoxes = boxesForPage(boxState, activePage);
@@ -474,12 +498,20 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
       const bytes = await pdfClient.redact(input, redactedPages, (p) => {
         setProgress(p);
       });
-      // Descarga local por Blob; sin red. (R24)
-      downloadBlob(pdfBytesToBlob(bytes), "redactado.pdf");
+      // Flujo click-driven (#39 R10, R16): guardamos el Blob local (sin red) y
+      // el usuario dispara la descarga con el botón guiado en el estado `done`.
+      setResultBlob(pdfBytesToBlob(bytes));
       setStatus("done");
     } catch (error) {
       setErrorMessage(messageForError(error));
       setStatus("error");
+    }
+  }
+
+  /** Descarga local por Blob; sin red. (#39 R12, R10 · #27 R24) */
+  function handleDownload(): void {
+    if (resultBlob) {
+      downloadBlob(resultBlob, "redactado.pdf");
     }
   }
 
@@ -515,6 +547,13 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
 
         {files.length > 0 && pageCount > 0 && (
           <div className="flex flex-col gap-4">
+            <UndoControls
+              canUndo={history.canUndo}
+              canRedo={history.canRedo}
+              onUndo={history.undo}
+              onRedo={history.redo}
+            />
+
             {/* Panel de búsqueda de texto */}
             <div className="flex flex-col gap-2 rounded-xl border border-line p-3">
               <label htmlFor="redact-search" className="hand text-lg text-ink">
@@ -756,9 +795,22 @@ export function RedactPdf(props?: RedactPdfProps): JSX.Element {
         )}
 
         {status === "done" && (
-          <div className="card hand max-w-[640px] text-xl text-ink">
-            <span className="stamp-topsecret mr-2">CLASIFICADO ✔</span>
-            Redacción completada. Se ha descargado el PDF redactado.
+          <div className="flex max-w-[640px] flex-col gap-4">
+            {/* Anuncio accesible sin mover el foco (#39 R5, R15); copy de "listo
+                para descargar" coherente con el flujo click-driven (#39 R16). */}
+            <div
+              role="status"
+              aria-live="polite"
+              className="card hand text-xl text-ink"
+            >
+              <span className="stamp-topsecret mr-2">CLASIFICADO ✔</span>
+              Redacción completada — tu PDF está listo para descargar abajo.
+            </div>
+            <DownloadCta
+              onDownload={handleDownload}
+              costLevel="medium"
+              label="⇩ Descargar PDF redactado"
+            />
           </div>
         )}
 

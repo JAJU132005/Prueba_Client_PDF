@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 
 import { Layout } from "@/components/Layout";
 import { TOOLS } from "@/lib/tools";
@@ -15,7 +15,6 @@ import { PdfToImages } from "@/routes/PdfToImages";
 import { ProtectUnlock } from "@/routes/ProtectUnlock";
 import { RedactPdf } from "@/routes/RedactPdf";
 import { RotatePdf } from "@/routes/RotatePdf";
-import { SignFreePlacement } from "@/routes/SignFreePlacement";
 import { SignPdf } from "@/routes/SignPdf";
 import { SplitPdf } from "@/routes/SplitPdf";
 import { ToolPlaceholder } from "@/routes/ToolPlaceholder";
@@ -38,7 +37,11 @@ export function App(): JSX.Element {
         <Route path="/proteger" element={<ProtectUnlock />} />
         <Route path="/anotar" element={<EditAnnotatePdf />} />
         <Route path="/firmar" element={<SignPdf />} />
-        <Route path="/firmar-libre" element={<SignFreePlacement />} />
+        {/* Ruta legacy de #30: redirige a la ruta canónica unificada. (R27) */}
+        <Route
+          path="/firmar-libre"
+          element={<Navigate to="/firmar" replace />}
+        />
         <Route path="/rellenar-formularios" element={<FillForms />} />
         <Route path="/reconocer-texto" element={<Ocr />} />
         <Route path="/redactar" element={<RedactPdf />} />
@@ -56,7 +59,6 @@ export function App(): JSX.Element {
             tool.path !== "/proteger" &&
             tool.path !== "/anotar" &&
             tool.path !== "/firmar" &&
-            tool.path !== "/firmar-libre" &&
             tool.path !== "/rellenar-formularios" &&
             tool.path !== "/reconocer-texto" &&
             tool.path !== "/redactar",

@@ -165,9 +165,6 @@ function fakeClient(redact: PdfClient["redact"]): PdfClient {
     async annotate() {
       return new Uint8Array();
     },
-    async sign() {
-      return new Uint8Array();
-    },
     async detectForm() {
       return { hasFields: false, fields: [] };
     },
@@ -338,12 +335,42 @@ describe("RedactPdf — exportar (R7, R9, R10)", () => {
     expect(raster.rendered).not.toContain(2);
     expect(raster.rendered).toContain(0);
 
-    // Descarga local (Blob) sin ninguna petición de red. (R10)
+    // Flujo click-driven (#39 R10, R16): al terminar NO se descarga solo; el
+    // estado `done` muestra el botón de descarga guiado.
+    const downloadBtn = await screen.findByRole("button", {
+      name: "⇩ Descargar PDF redactado",
+    });
+    expect(downloadBtn).toHaveClass("download-cta");
+    expect(downloadBlob).not.toHaveBeenCalled();
+
+    // Al pulsarlo: descarga local (Blob) sin ninguna petición de red. (R10, #39 R12)
+    fireEvent.click(downloadBtn);
     await waitFor(() => {
       expect(downloadBlob).toHaveBeenCalledTimes(1);
     });
     expect(vi.mocked(downloadBlob).mock.calls[0][1]).toBe("redactado.pdf");
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("el estado `done` anuncia el resultado con role=status y copy 'listo para descargar' (#39 R15, R16)", async () => {
+    const client = fakeClient(async () => new Uint8Array([0x25, 0x50, 0x44, 0x46]));
+    const { container } = renderRedact(client, fakeRasterizer(2).factory);
+    await drawBox(container);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Redactar y descargar" }),
+    );
+
+    // Anuncio accesible sin mover el foco (#39 R15).
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toMatch(/listo para descargar/i);
+    // El copy ya NO afirma que se descargó (flujo click-driven, #39 R16).
+    expect(status.textContent).not.toMatch(/se ha descargado/i);
+    // El anuncio no roba el foco: el botón de descarga no queda enfocado.
+    const downloadBtn = screen.getByRole("button", {
+      name: "⇩ Descargar PDF redactado",
+    });
+    expect(document.activeElement).not.toBe(downloadBtn);
   });
 });
 
@@ -506,6 +533,59 @@ describe("RedactPdf — editar cajas (T19: R13, R14, R17)", () => {
   });
 });
 
+describe("RedactPdf — deshacer/rehacer (#37 R30, R20, R33)", () => {
+  it("dibujar una caja y deshacerla/rehacerla con el botón (R30)", async () => {
+    const { container } = renderRedact(
+      fakeClient(async () => new Uint8Array()),
+      fakeRasterizer(2).factory,
+      { createId: seqId() },
+    );
+    await drawBox(container);
+    expect(await screen.findByTestId("redaction-box")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Deshacer" }));
+    expect(screen.queryByTestId("redaction-box")).not.toBeInTheDocument();
+    expect(screen.getByText(/Cajas en esta página:/).textContent).toContain(
+      "Cajas en esta página: 0",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Rehacer" }));
+    expect(await screen.findByTestId("redaction-box")).toBeInTheDocument();
+  });
+
+  it("el atajo Ctrl+Z NO dispara con el foco en el campo de búsqueda (R20)", async () => {
+    const { container } = renderRedact(
+      fakeClient(async () => new Uint8Array()),
+      fakeRasterizer(2).factory,
+      { createId: seqId() },
+    );
+    await drawBox(container);
+    expect(await screen.findByTestId("redaction-box")).toBeInTheDocument();
+
+    const search = screen.getByLabelText("Buscar texto para tachar");
+    search.focus();
+    fireEvent.keyDown(search, { key: "z", ctrlKey: true });
+
+    // La caja sigue ahí: el undo nativo del input no fue pisado. (R20)
+    expect(screen.getByTestId("redaction-box")).toBeInTheDocument();
+  });
+
+  it("cambiar de archivo limpia el historial (Deshacer deshabilitado) (R33)", async () => {
+    const { container } = renderRedact(
+      fakeClient(async () => new Uint8Array()),
+      fakeRasterizer(2).factory,
+      { createId: seqId() },
+    );
+    await drawBox(container);
+    expect(screen.getByRole("button", { name: "Deshacer" })).toBeEnabled();
+
+    addPdf(container);
+    await screen.findByTestId("redaction-overlay");
+    expect(screen.getByRole("button", { name: "Deshacer" })).toBeDisabled();
+    expect(screen.queryByTestId("redaction-box")).not.toBeInTheDocument();
+  });
+});
+
 describe("RedactPdf — exportar tras búsqueda (T20: R19, R20, R23, R24)", () => {
   it("exporta la página marcada por búsqueda por el pipeline de #27 y descarga sin red", async () => {
     let capturedInput: Uint8Array | undefined;
@@ -545,7 +625,13 @@ describe("RedactPdf — exportar tras búsqueda (T20: R19, R20, R23, R24)", () =
     expect(raster.rendered).not.toContain(1);
     expect(raster.rendered).not.toContain(2);
 
-    // Descarga local (Blob) sin ninguna petición de red. (R24)
+    // Descarga local (Blob) sin red, ahora click-driven (#39 R10, R16): se
+    // dispara al pulsar el botón guiado del estado `done`. (R24)
+    const downloadBtn = await screen.findByRole("button", {
+      name: "⇩ Descargar PDF redactado",
+    });
+    expect(downloadBlob).not.toHaveBeenCalled();
+    fireEvent.click(downloadBtn);
     await waitFor(() => {
       expect(downloadBlob).toHaveBeenCalledTimes(1);
     });

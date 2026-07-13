@@ -44,7 +44,11 @@ describe("PandaArt", () => {
 
   it("usa los colores de los tokens para funcionar en claro y oscuro (R10)", () => {
     const { container } = render(<PandaArt kind="unir" />);
-    expect(container.querySelector("svg")?.innerHTML).toContain("var(--ink");
+    const markup = container.querySelector("svg")?.innerHTML ?? "";
+    expect(markup).toContain("var(--ink");
+    // #41: hojas/papeles y ojos tokenizados (no #fff quemado) para la pizarra.
+    expect(markup).toContain("var(--surface");
+    expect(markup).toContain("var(--panda-eye");
   });
 
   it("con label expone role='img' y aria-label (R11)", () => {

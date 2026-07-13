@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Gochi+Hand&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#faf7ef;--card:#fffdf6;--line:rgba(96,140,190,.16);--margin:rgba(224,100,90,.5);--ink:#2d2a26;--ink-soft:#7a7466;--tape:rgba(255,222,116,.85);--mk-green:#5da32c;--mk-orange:#d0821a;--mk-red:#d84438;--hl-green:rgba(150,222,80,.5);--hl-orange:rgba(255,183,77,.55);--hl-red:rgba(255,107,94,.45);--shadow:rgba(45,42,38,.16);--postit:#fff9a8}
+html.dark{--paper:#282c30;--card:#32373c;--line:rgba(255,255,255,.06);--margin:rgba(226,104,95,.55);--ink:#f0ede3;--ink-soft:#b3ad9f;--tape:rgba(255,222,116,.3);--mk-green:#a8e75f;--mk-orange:#ffc25e;--mk-red:#ff7a6e;--hl-green:rgba(150,222,80,.34);--hl-orange:rgba(255,183,77,.34);--hl-red:rgba(255,107,94,.34);--shadow:rgba(0,0,0,.5);--postit:#6b6428}
+html,body{margin:0;padding:0}
+body{background-color:var(--paper);background-image:linear-gradient(90deg,transparent 86px,var(--margin) 86px,var(--margin) 88px,transparent 88px),repeating-linear-gradient(180deg,transparent 0px,transparent 31px,var(--line) 31px,var(--line) 32px);color:var(--ink);font-family:'Nunito',sans-serif}
+*{box-sizing:border-box}
+::selection{background:var(--hl-green)}
+@keyframes cp-fall{0%{transform:translateY(-6px) rotate(0deg);opacity:1}100%{transform:translateY(110px) rotate(260deg);opacity:0}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+</style>
+</helmet>
+
+<header style="display:flex;align-items:center;flex-wrap:wrap;gap:14px;max-width:1080px;margin:0 auto;padding:20px 32px 8px 32px">
+  <a href="Home.dc.html" style="font-family:'Patrick Hand',cursive;font-size:19px;color:var(--ink);text-decoration:none;box-shadow:inset 0 -8px 0 var(--hl-green)" style-hover="box-shadow:inset 0 -14px 0 var(--hl-green)" style-focus="outline:3px dashed var(--ink);outline-offset:3px">← volver al cuaderno</a>
+  <div style="flex:1 1 auto"></div>
+  <button onClick="{{ toggleTheme }}" style="font-family:'Patrick Hand',cursive;font-size:16px;color:var(--ink);background:transparent;border:2.5px solid var(--ink);border-radius:60px 45px 55px 50px/50px 60px 45px 55px;padding:5px 16px;cursor:pointer" style-hover="background:var(--hl-orange)" style-focus="outline:3px dashed var(--ink);outline-offset:3px">{{ themeLabel }}</button>
+  <span style="font-family:'Patrick Hand',cursive;font-size:16px;padding:4px 14px;background:var(--hl-green);border-radius:12px 16px 14px 18px/18px 14px 16px 12px">✓ 100% local</span>
+</header>
+
+<main data-screen-label="{{ tool.name }}" style="max-width:1080px;margin:0 auto;padding:20px 32px 40px 32px" onDrop="{{ onDrop }}" onDragOver="{{ onDragOver }}">
+
+  <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
+    <div style="flex:1 1 460px;min-width:300px">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span aria-hidden="true" style="font-family:'Gochi Hand',cursive;font-size:24px;display:grid;place-items:center;width:56px;height:56px;border:2.5px dashed var(--ink);border-radius:60% 40% 55% 45%/45% 55% 40% 60%;background:{{ tool.hl }}">{{ tool.icon }}</span>
+        <h1 style="margin:0;font-family:'Patrick Hand',cursive;font-weight:400;font-size:clamp(32px,4vw,46px);line-height:1.05"><span style="box-shadow:inset 0 -12px 0 {{ tool.hl }}">{{ tool.name }}</span></h1>
+        <span title="{{ tool.pose }}" style="font-family:'Patrick Hand',cursive;font-size:16px;padding:3px 12px;background:{{ tool.hl }};border-radius:10px 14px 12px 16px/16px 12px 14px 10px;white-space:nowrap">{{ tool.levelWord }} · {{ tool.frase }}</span>
+      </div>
+      <p style="margin:10px 0 0 0;font-size:17px;font-weight:600;max-width:60ch">{{ tool.desc }}</p>
+      <div style="margin-top:6px;display:flex;align-items:center;gap:12px">
+        <x-import component-from-global-scope="panda-art" from="./panda-art.js" kind="{{ poseKind }}" label="{{ tool.pose }}" style="width:72px" hint-size="72px,50px"></x-import>
+        <p style="margin:0;font-family:'Patrick Hand',cursive;font-size:17px;color:var(--ink-soft)">{{ tool.levelHint }}</p>
+      </div>
+    </div>
+    <sc-if value="{{ tool.isHeavy }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:0 0 210px;padding:14px 16px;background:var(--postit);border:2px solid rgba(0,0,0,.25);transform:rotate(2.5deg);box-shadow:3px 5px 0 var(--shadow);font-family:'Patrick Hand',cursive;font-size:17px;line-height:1.25">⚠️ En móvil esto suda de verdad
+        <span style="display:block;margin-top:6px;font-family:monospace;font-size:11px;color:rgba(0,0,0,.55)">aviso móvil ya existente — solo restilizado</span>
+      </div>
+    </sc-if>
+  </div>
+
+  <section data-comment-anchor="escena" style="margin-top:26px;display:flex;gap:22px;flex-wrap:wrap;align-items:stretch">
+    <div style="flex:1 1 420px;min-width:300px;padding:18px 20px;background:var(--card);border:2.5px solid var(--ink);border-radius:255px 18px 225px 18px/18px 225px 18px 255px;box-shadow:4px 5px 0 var(--shadow)">
+      <h2 style="margin:0;font-family:'Patrick Hand',cursive;font-weight:400;font-size:27px"><span style="box-shadow:inset 0 -9px 0 {{ tool.hl }}">{{ tool.scene }}</span> <span style="font-family:'Gochi Hand',cursive;font-size:20px;color:var(--ink-soft)">{{ tool.ono }}</span></h2>
+      <div style="margin-top:12px;display:grid;place-items:center">
+        <x-import component-from-global-scope="panda-art" from="./panda-art.js" kind="{{ artKind }}" label="{{ tool.art }}" style="width:min(360px,100%)" hint-size="340px,180px"></x-import>
+      </div>
+      <sc-if value="{{ tool.hasNote }}" hint-placeholder-val="{{ false }}">
+        <p style="margin:12px 0 0 0;font-family:'Patrick Hand',cursive;font-size:17px;color:var(--ink-soft)">{{ tool.note }}</p>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ isRedactar }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1 1 300px;min-width:280px;position:relative;padding:18px 20px;background:var(--card);border:2.5px solid var(--ink);border-radius:6px;box-shadow:4px 5px 0 var(--shadow)">
+        <span style="position:absolute;top:-8px;left:22px;width:26px;height:8px;background:#98a0a8;border-radius:2px;transform:rotate(-4deg)"></span>
+        <p style="margin:0;font-family:'Patrick Hand',cursive;font-size:19px">Ficha del expediente — léela en serio:</p>
+        <p style="margin:8px 0 0 0;font-size:15px;line-height:1.5;font-weight:600">Las páginas con redacciones se rasterizan (se convierten en imagen) y pierden el texto seleccionable. A cambio, el contenido tapado queda <b>eliminado del archivo de verdad</b>, no solo cubierto. Las páginas sin redacciones conservan su texto y calidad.</p>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isOcr }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:0 1 280px;min-width:250px;padding:16px 18px;background:var(--postit);border:2px solid rgba(0,0,0,.25);transform:rotate(-2deg);box-shadow:3px 5px 0 var(--shadow);font-family:'Patrick Hand',cursive;font-size:18px;line-height:1.3;align-self:flex-start">⚠️ Esta es la más pesada de todas: en móvil, tu teléfono va a sudar de verdad.</div>
+    </sc-if>
+  </section>
+
+  <section data-comment-anchor="dropzone" style="margin-top:26px">
+    <div style="position:relative;padding:30px 24px;border:3px dashed var(--ink);border-radius:22px 12px 24px 10px/10px 24px 12px 22px;background:var(--card);text-align:center">
+      <span style="position:absolute;top:-13px;left:40px;width:76px;height:22px;background:var(--tape);transform:rotate(-5deg);border-left:2px dashed rgba(0,0,0,.12);border-right:2px dashed rgba(0,0,0,.12)"></span>
+      <p style="margin:0;font-family:'Patrick Hand',cursive;font-size:24px">Arrastra {{ tool.dropWhat }} aquí — ¡prometo no chismosear!</p>
+      <p style="margin:6px 0 14px 0;font-family:monospace;font-size:12px;color:var(--ink-soft)">nunca sale de tu dispositivo · validación y límites: los de siempre</p>
+      <button onClick="{{ addFile }}" style="font-family:'Patrick Hand',cursive;font-size:18px;color:var(--ink);background:transparent;border:2.5px solid var(--ink);border-radius:60px 45px 55px 50px/50px 60px 45px 55px;padding:7px 22px;cursor:pointer" style-hover="background:var(--hl-green)" style-focus="outline:3px dashed var(--ink);outline-offset:3px">…o elige un archivo (demo)</button>
+    </div>
+
+    <sc-if value="{{ hasFiles }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+        <sc-for list="{{ fileViews }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:var(--card);border:2.5px solid var(--ink);border-radius:16px 8px 14px 10px/10px 14px 8px 16px;box-shadow:3px 3px 0 var(--shadow);transform:rotate({{ f.rot }})">
+            <span aria-hidden="true" style="font-family:'Gochi Hand',cursive;font-size:18px">🗎</span>
+            <span style="font-family:'Patrick Hand',cursive;font-size:19px">{{ f.name }}</span>
+            <span style="font-family:monospace;font-size:12px;color:var(--ink-soft)">{{ f.meta }}</span>
+            <span style="flex:1 1 auto"></span>
+            <sc-if value="{{ f.canReorder }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ f.up }}" aria-label="Subir en la pila" style="font-size:16px;background:transparent;border:2px solid var(--ink);border-radius:50% 45% 55% 50%;width:32px;height:32px;cursor:pointer;color:var(--ink)" style-hover="background:var(--hl-green)" style-focus="outline:3px dashed var(--ink)">↑</button>
+              <button onClick="{{ f.down }}" aria-label="Bajar en la pila" style="font-size:16px;background:transparent;border:2px solid var(--ink);border-radius:45% 55% 50% 50%;width:32px;height:32px;cursor:pointer;color:var(--ink)" style-hover="background:var(--hl-green)" style-focus="outline:3px dashed var(--ink)">↓</button>
+            </sc-if>
+            <button onClick="{{ f.preview }}" style="font-family:'Patrick Hand',cursive;font-size:16px;background:transparent;border:2px solid var(--ink);border-radius:14px 10px 16px 8px/8px 16px 10px 14px;padding:3px 12px;cursor:pointer;color:var(--ink)" style-hover="background:var(--hl-orange)" style-focus="outline:3px dashed var(--ink)">Vista previa</button>
+            <button onClick="{{ f.remove }}" aria-label="Quitar archivo" style="font-family:'Patrick Hand',cursive;font-size:18px;background:transparent;border:none;cursor:pointer;color:var(--mk-red)" style-focus="outline:3px dashed var(--ink)">✕</button>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </section>
+
+  <sc-if value="{{ isT3 }}" hint-placeholder-val="{{ false }}">
+    <section data-comment-anchor="paginas" style="margin-top:26px">
+      <h2 style="margin:0 0 12px 0;font-family:'Patrick Hand',cursive;font-weight:400;font-size:26px"><span style="box-shadow:inset 0 -9px 0 {{ tool.hl }}">Elige páginas</span> <span style="font-family:monospace;font-size:12px;color:var(--ink-soft)">sin escribir guiones ni comas</span></h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <button onClick="{{ selAll }}" style="font-family:'Patrick Hand',cursive;font-size:16px;color:var(--ink);background:transparent;border:2px solid var(--ink);border-radius:60px 45px 55px 50px/50px 60px 45px 55px;padding:4px 14px;cursor:pointer" style-hover="background:var(--hl-green)" style-focus="outline:3px dashed var(--ink)">Todas</button>
+        <button onClick="{{ selEven }}" style="font-family:'Patrick Hand',cursive;font-size:16px;color:var(--ink);background:transparent;border:2px solid var(--ink);border-radius:45px 60px 50px 55px/55px 50px 60px 45px;padding:4px 14px;cursor:pointer" style-hover="background:var(--hl-green)" style-focus="outline:3px dashed var(--ink)">Pares</button>
+        <button onClick="{{ selOdd }}" style="font-family:'Patrick Hand',cursive;font-size:16px;color:var(--ink);background:transparent;border:2px solid var(--ink);border-radius:55px 50px 60px 45px/45px 60px 50px 55px;padding:4px 14px;cursor:pointer" style-hover="background:var(--hl-green)" style-focus="outline:3px dashed var(--ink)">Impares</button>
+        <button onClick="{{ selInvert }}" style="font-family:'Patrick Hand',cursive;font-size:16px;color:var(--ink);background:transparent;border:2px solid var(--ink);border-radius:50px 55px 45px 60px/60px 45px 55px 50px;padding:4px 14px;cursor:pointer" style-hover="background:var(--hl-green)" style-focus="outline:3px dashed var(--ink)">Invertir</button>
+        <button onClick="{{ selNone }}" style="font-family:'Patrick Hand',cursive;font-size:16px;color:var(--ink-soft);background:transparent;border:2px dashed var(--ink-soft);border-radius:50px 55px 45px 60px/60px 45px 55px 50px;padding:4px 14px;cursor:pointer" style-hover="background:var(--hl-red)" style-focus="outline:3px dashed var(--ink)">Ninguna</button>
+        <span style="align-self:center;font-family:monospace;font-size:12px;color:var(--ink-soft)">rango canónico: {{ rangeLabel }}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:14px">
+        <sc-for list="{{ pages }}" as="p" hint-placeholder-count="12">
+          <button onClick="{{ p.toggle }}" aria-pressed="{{ p.sel }}" style="position:relative;aspect-ratio:3/4;background:{{ p.bg }};border:2.5px solid var(--ink);border-radius:8px 5px 9px 4px/4px 9px 5px 8px;cursor:pointer;box-shadow:2px 3px 0 var(--shadow);display:grid;place-items:center;transition:transform .12s" style-hover="transform:rotate(-2deg) scale(1.05)" style-focus="outline:3px dashed var(--ink);outline-offset:3px">
+            <span style="font-family:'Patrick Hand',cursive;font-size:20px;color:var(--ink)">{{ p.n }}</span>
+            <span style="position:absolute;top:2px;right:6px;font-family:'Gochi Hand',cursive;font-size:22px;color:var(--mk-green)">{{ p.mark }}</span>
+          </button>
+        </sc-for>
+      </div>
+      <p style="margin:10px 0 0 0;font-family:monospace;font-size:12px;color:var(--ink-soft)">{{ t3Hint }}</p>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ hasOptions }}" hint-placeholder-val="{{ false }}">
+    <section data-comment-anchor="opciones" style="margin-top:26px;display:flex;gap:22px;flex-wrap:wrap">
+      <sc-for list="{{ optionViews }}" as="o" hint-placeholder-count="1">
+        <div style="flex:1 1 260px;min-width:240px;padding:16px 18px;background:var(--card);border:2.5px solid var(--ink);border-radius:18px 10px 20px 8px/8px 20px 10px 18px;box-shadow:3px 4px 0 var(--shadow)">
+          <h3 style="margin:0 0 10px 0;font-family:'Patrick Hand',cursive;font-weight:400;font-size:21px">{{ o.label }}</h3>
+          <sc-if value="{{ o.isChoice }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ o.choices }}" as="ch" hint-placeholder-count="2">
+                <button onClick="{{ ch.pick }}" aria-pressed="{{ ch.active }}" style="font-family:'Patrick Hand',cursive;font-size:17px;color:var(--ink);background:{{ ch.bg }};border:2.5px solid var(--ink);border-radius:60px 45px 55px 50px/50px 60px 45px 55px;padding:5px 15px;cursor:pointer" style-hover="transform:rotate(-1.5deg)" style-focus="outline:3px dashed var(--ink);outline-offset:3px">{{ ch.label }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ o.isSlider }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:12px">
+              <input type="range" min="{{ o.min }}" max="{{ o.max }}" value="{{ o.value }}" onChange="{{ o.slide }}" style="flex:1;accent-color:var(--mk-orange)"></input>
+              <span style="font-family:monospace;font-size:14px;min-width:52px;text-align:right">{{ o.display }}</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ o.isText }}" hint-placeholder-val="{{ false }}">
+            <input type="{{ o.inputType }}" value="{{ o.value }}" onChange="{{ o.type_ }}" placeholder="{{ o.placeholder }}" style="width:100%;font-family:'Patrick Hand',cursive;font-size:18px;color:var(--ink);background:var(--paper);border:none;border-bottom:2.5px dashed var(--ink);padding:6px 4px;outline:none" style-focus="border-bottom:2.5px solid var(--mk-green)"></input>
+          </sc-if>
+          <sc-if value="{{ o.hasHint }}" hint-placeholder-val="{{ false }}">
+            <p style="margin:10px 0 0 0;font-family:monospace;font-size:11.5px;color:var(--ink-soft)">{{ o.hint }}</p>
+          </sc-if>
+        </div>
+      </sc-for>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ isT4 }}" hint-placeholder-val="{{ false }}">
+    <section data-comment-anchor="preview" style="margin-top:26px;display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start">
+      <div style="flex:0 1 400px;min-width:290px">
+        <h2 style="margin:0 0 10px 0;font-family:'Patrick Hand',cursive;font-weight:400;font-size:24px"><span style="box-shadow:inset 0 -9px 0 {{ tool.hl }}">Vista previa en vivo</span></h2>
+        <div onClick="{{ sheetClick }}" style="position:relative;aspect-ratio:3/4;background:#fff;border:2.5px solid var(--ink);border-radius:4px;box-shadow:5px 6px 0 var(--shadow);overflow:hidden;cursor:{{ sheetCursor }};background-image:repeating-linear-gradient(180deg,transparent 0px,transparent 23px,rgba(96,140,190,.14) 23px,rgba(96,140,190,.14) 24px)">
+          <sc-if value="{{ isMarca }}" hint-placeholder-val="{{ false }}">
+            <span style="{{ wmStyle }}">{{ wmText }}</span>
+          </sc-if>
+          <sc-if value="{{ isNumeros }}" hint-placeholder-val="{{ false }}">
+            <span style="{{ numStyle }}">{{ numLabel }}</span>
+          </sc-if>
+          <sc-if value="{{ isRellenar }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:26px 22px;display:flex;flex-direction:column;gap:20px">
+              <span style="font-family:'Patrick Hand',cursive;font-size:18px;color:#2d2a26">EXAMEN — Formulario oficial</span>
+              <span style="font-family:monospace;font-size:13px;color:#2d2a26">Nombre: <b style="font-family:'Gochi Hand',cursive;font-size:17px;border-bottom:2px solid #2d2a26;padding:0 6px">{{ fNombre }}</b></span>
+              <span style="font-family:monospace;font-size:13px;color:#2d2a26">Fecha: <b style="font-family:'Gochi Hand',cursive;font-size:17px;border-bottom:2px solid #2d2a26;padding:0 6px">{{ fFecha }}</b></span>
+              <span style="font-family:monospace;font-size:13px;color:#2d2a26">Motivo: <b style="font-family:'Gochi Hand',cursive;font-size:17px;border-bottom:2px solid #2d2a26;padding:0 6px">{{ fMotivo }}</b></span>
+            </div>
+          </sc-if>
+          <sc-for list="{{ marks }}" as="m" hint-placeholder-count="0">
+            <span style="{{ m.style }}">{{ m.label }}</span>
+          </sc-for>
+        </div>
+        <p style="margin:8px 0 0 0;font-family:monospace;font-size:12px;color:var(--ink-soft)">{{ sheetHint }}</p>
+        <sc-if value="{{ hasMarks }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ clearMarks }}" style="margin-top:8px;font-family:'Patrick Hand',cursive;font-size:15px;color:var(--ink-soft);background:transparent;border:2px dashed var(--ink-soft);border-radius:50px 55px 45px 60px/60px 45px 55px 50px;padding:3px 12px;cursor:pointer" style-focus="outline:3px dashed var(--ink)">borrar todo lo colocado</button>
+        </sc-if>
+      </div>
+      <div style="flex:1 1 320px;min-width:280px;display:flex;flex-direction:column;gap:16px">
+        <sc-if value="{{ isNumeros }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:16px 18px;background:var(--card);border:2.5px solid var(--ink);border-radius:18px 10px 20px 8px/8px 20px 10px 18px;box-shadow:3px 4px 0 var(--shadow)">
+            <h3 style="margin:0 0 10px 0;font-family:'Patrick Hand',cursive;font-weight:400;font-size:21px">Posición del sello (toca un post-it)</h3>
+            <div style="display:grid;grid-template-columns:repeat(3,60px);gap:10px">
+              <sc-for list="{{ posButtons }}" as="pb" hint-placeholder-count="6">
+                <button onClick="{{ pb.pick }}" aria-pressed="{{ pb.active }}" style="height:44px;font-family:'Patrick Hand',cursive;font-size:20px;color:var(--ink);background:{{ pb.bg }};border:2px solid rgba(0,0,0,.25);cursor:pointer;transform:rotate({{ pb.rot }});box-shadow:2px 3px 0 var(--shadow)" style-focus="outline:3px dashed var(--ink)">{{ pb.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isFirmar }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:16px 18px;background:var(--card);border:2.5px solid var(--ink);border-radius:18px 10px 20px 8px/8px 20px 10px 18px;box-shadow:3px 4px 0 var(--shadow)">
+            <h3 style="margin:0 0 10px 0;font-family:'Patrick Hand',cursive;font-weight:400;font-size:21px">Tu firma</h3>
+            <div style="height:110px;border:2.5px dashed var(--ink-soft);border-radius:10px;display:grid;place-items:center">
+              <span style="font-family:'Gochi Hand',cursive;font-size:26px;color:var(--ink-soft)">firma aquí ✗__________</span>
+            </div>
+            <p style="margin:10px 0 0 0;font-family:monospace;font-size:11.5px;color:var(--ink-soft)">[canvas de firma existente — solo cambia la piel] El panda sigue tu trazo con la mirada.</p>
+          </div>
+        </sc-if>
+        <div style="padding:14px 18px;background:var(--card);border:2px dashed var(--ink-soft);border-radius:14px">
+          <p style="margin:0;font-family:'Patrick Hand',cursive;font-size:17px;color:var(--ink-soft)">{{ t4Note }}</p>
+        </div>
+      </div>
+    </section>
+  </sc-if>
+
+  <section data-comment-anchor="accion" style="margin-top:32px">
+    <sc-if value="{{ isIdle }}" hint-placeholder-val="{{ true }}">
+      <button onClick="{{ start }}" style="font-family:'Patrick Hand',cursive;font-size:26px;color:var(--ink);background:{{ tool.hl }};border:3px solid var(--ink);border-radius:255px 20px 225px 20px/20px 225px 20px 255px;padding:12px 36px;cursor:pointer;box-shadow:4px 6px 0 var(--shadow);transition:transform .15s" style-hover="transform:rotate(-1deg) scale(1.03)" style-focus="outline:3px dashed var(--ink);outline-offset:5px">{{ actionLabel }}</button>
+    </sc-if>
+
+    <sc-if value="{{ isProcessing }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:640px">
+        <p style="margin:0 0 10px 0;font-family:'Patrick Hand',cursive;font-size:21px">{{ tool.during }} <span style="font-family:'Gochi Hand',cursive;color:var(--ink-soft)">{{ tool.ono }}</span></p>
+        <div role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progressNum }}" style="position:relative;height:34px;border:3px solid var(--ink);border-radius:20px 14px 22px 12px/12px 22px 14px 20px;background:var(--card);overflow:hidden">
+          <div style="position:absolute;inset:2px auto 2px 2px;width:{{ progressPct }};background:repeating-linear-gradient(90deg,#8fd14f 0 34px,#79b84a 34px 38px);border-radius:14px;transition:width .1s linear"></div>
+          <span style="position:absolute;inset:0;display:grid;place-items:center;font-family:monospace;font-size:13px">{{ progressPct }} · rama de bambú llenándose</span>
+        </div>
+        <p style="margin:8px 0 0 0;font-family:'Patrick Hand',cursive;font-size:15px;color:var(--ink-soft)">({{ tool.duringArt }})</p>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:stretch">
+        <div style="flex:1 1 320px;min-width:280px;position:relative;padding:18px 20px;background:var(--card);border:2.5px solid var(--ink);border-radius:255px 18px 225px 18px/18px 225px 18px 255px;box-shadow:4px 5px 0 var(--shadow);overflow:hidden">
+          <span aria-hidden="true" style="position:absolute;left:16%;top:0;width:9px;height:9px;background:var(--mk-green);animation:cp-fall 1.6s ease-in .1s both"></span>
+          <span aria-hidden="true" style="position:absolute;left:36%;top:0;width:8px;height:8px;background:var(--mk-orange);animation:cp-fall 1.4s ease-in .3s both"></span>
+          <span aria-hidden="true" style="position:absolute;left:58%;top:0;width:10px;height:10px;background:var(--mk-red);animation:cp-fall 1.7s ease-in .2s both"></span>
+          <span aria-hidden="true" style="position:absolute;left:76%;top:0;width:8px;height:8px;background:var(--mk-green);animation:cp-fall 1.5s ease-in .45s both"></span>
+          <h3 style="margin:0;font-family:'Patrick Hand',cursive;font-weight:400;font-size:26px"><span style="box-shadow:inset 0 -10px 0 var(--hl-green)">¡Listo!</span> {{ doneLine }}</h3>
+          <div style="margin-top:10px;display:grid;place-items:center">
+            <x-import component-from-global-scope="panda-art" from="./panda-art.js" kind="trituradora" label="Trituradora feliz convirtiendo los datos temporales en confeti de papel" style="width:min(270px,100%)" hint-size="270px,118px"></x-import>
+          </div>
+          <p style="margin:10px 0 0 0;font-family:'Patrick Hand',cursive;font-size:18px">borrado hasta de mi memoria 🤝</p>
+          <sc-if value="{{ hasResultLine }}" hint-placeholder-val="{{ false }}">
+            <p style="margin:8px 0 0 0;font-family:monospace;font-size:14px">{{ resultLine }}</p>
+          </sc-if>
+        </div>
+        <div style="flex:0 1 260px;min-width:240px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+          <div style="position:relative;width:170px;aspect-ratio:3/4;background:#fff;border:2.5px solid var(--ink);border-radius:4px;box-shadow:4px 5px 0 var(--shadow)">
+            <span style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%) rotate(-14deg);font-family:'Patrick Hand',cursive;font-size:21px;color:var(--mk-red);border:3px double var(--mk-red);border-radius:6px;padding:3px 10px;white-space:nowrap">TOP SECRET</span>
+            <span style="position:absolute;left:10px;right:10px;bottom:12px;font-family:monospace;font-size:10px;color:#8a857b">{{ outName }}</span>
+          </div>
+          <button style="font-family:'Patrick Hand',cursive;font-size:20px;color:var(--ink);background:var(--hl-green);border:3px solid var(--ink);border-radius:255px 20px 225px 20px/20px 225px 20px 255px;padding:9px 26px;cursor:pointer;box-shadow:3px 4px 0 var(--shadow)" style-hover="transform:rotate(-1deg)" style-focus="outline:3px dashed var(--ink);outline-offset:4px">⇩ Descargar resultado</button>
+          <button onClick="{{ reset }}" style="font-family:'Patrick Hand',cursive;font-size:16px;color:var(--ink-soft);background:transparent;border:2px dashed var(--ink-soft);border-radius:50px 55px 45px 60px/60px 45px 55px 50px;padding:4px 14px;cursor:pointer" style-focus="outline:3px dashed var(--ink)">empezar de nuevo</button>
+        </div>
+      </div>
+    </sc-if>
+  </section>
+</main>
+
+<footer style="max-width:1080px;margin:20px auto 0 auto;padding:20px 32px 120px 32px;border-top:3px dashed var(--ink-soft);display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+  <span style="font-family:'Patrick Hand',cursive;font-size:19px">Bytes enviados a internet: <b style="font-family:'Gochi Hand',cursive;font-size:27px;color:var(--mk-green);text-decoration:underline wavy var(--mk-green)">0</b></span>
+  <span style="margin-left:auto;font-family:'Patrick Hand',cursive;font-size:16px;color:var(--ink-soft)">lo que pasa en tu diario, se queda en tu diario 🤝</span>
+</footer>
+
+<sc-if value="{{ previewOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closePreview }}" style="position:fixed;inset:0;background:rgba(30,28,25,.55);display:grid;place-items:center;z-index:8000;padding:24px">
+    <div onClick="{{ stop }}" role="dialog" aria-label="Vista previa del PDF" style="width:min(420px,90vw);background:var(--card);border:3px solid var(--ink);border-radius:22px 12px 24px 10px/10px 24px 12px 22px;box-shadow:6px 8px 0 rgba(0,0,0,.3);padding:18px 20px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'Patrick Hand',cursive;font-size:20px">{{ previewName }}</span>
+        <span style="flex:1"></span>
+        <button onClick="{{ closePreview }}" aria-label="Cerrar vista previa" style="font-family:'Patrick Hand',cursive;font-size:20px;background:transparent;border:none;cursor:pointer;color:var(--mk-red)" style-focus="outline:3px dashed var(--ink)">✕</button>
+      </div>
+      <div style="margin-top:10px;aspect-ratio:3/4;background:#fff;border:2.5px solid var(--ink);border-radius:4px;display:grid;place-items:center;background-image:repeating-linear-gradient(180deg,transparent 0px,transparent 23px,rgba(96,140,190,.14) 23px,rgba(96,140,190,.14) 24px)">
+        <div style="width:78%;display:flex;flex-direction:column;gap:12px">
+          <span style="height:10px;width:60%;background:#d5cfc2;border-radius:5px"></span>
+          <span style="height:8px;width:92%;background:#e3ded2;border-radius:4px"></span>
+          <span style="height:8px;width:86%;background:#e3ded2;border-radius:4px"></span>
+          <span style="height:8px;width:90%;background:#e3ded2;border-radius:4px"></span>
+          <span style="height:8px;width:64%;background:#e3ded2;border-radius:4px"></span>
+          <span style="font-family:monospace;font-size:11px;color:#8a857b;text-align:center;margin-top:6px">render pdf.js — página {{ previewPage }}</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:12px;justify-content:center">
+        <button onClick="{{ prevPage }}" style="font-family:'Patrick Hand',cursive;font-size:18px;background:transparent;border:2px solid var(--ink);border-radius:50%;width:36px;height:36px;cursor:pointer;color:var(--ink)" style-focus="outline:3px dashed var(--ink)">←</button>
+        <span style="font-family:monospace;font-size:13px">{{ previewLabel }}</span>
+        <button onClick="{{ nextPage }}" style="font-family:'Patrick Hand',cursive;font-size:18px;background:transparent;border:2px solid var(--ink);border-radius:50%;width:36px;height:36px;cursor:pointer;color:var(--ink)" style-focus="outline:3px dashed var(--ink)">→</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ showPanda }}" hint-placeholder-val="{{ true }}">
+  <x-import component-from-global-scope="panda-widget" from="./panda-widget.js" hint-size="132px,120px"></x-import>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showPanda&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Panda&quot;,&quot;description&quot;:&quot;Mostrar el panda interactivo de guardia&quot;},&quot;demoRapida&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo&quot;,&quot;description&quot;:&quot;Saltar la animación de progreso al procesar&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.LEVELS = {
+      ligera: { word: 'Ligera', frase: 'Pan comido', hl: 'var(--hl-green)', pose: 'panda en silla de playa con limonada de bambú', hint: 'Tu dispositivo ni se despeina.' },
+      media: { word: 'Media', frase: 'Ahí va la cosa', hl: 'var(--hl-orange)', pose: 'panda trotando con una gotita de sudor', hint: 'Tu dispositivo trota un poco.' },
+      pesada: { word: 'Pesada', frase: 'Modo bestia', hl: 'var(--hl-red)', pose: 'panda levantando una pesa gigante, vapor en las orejas', hint: 'Tu dispositivo va a sudar.' }
+    };
+    this.TOOLS = {
+      'unir': { name: 'Unir PDF', icon: '＋', level: 'ligera', t: 1, dropWhat: 'tus PDF', desc: 'Combina varios PDF en un único documento, en el orden que elijas.', scene: 'La grapadora gigante', ono: '¡CLACK!', btn: 'Unir con la grapadora', during: 'El panda alinea tus hojas y aprieta la grapadora…', duringArt: 'panda apretando la grapadora gigante; al final la sopla como pistolero', art: '[ARTE · escena] El escritorio del panda: los PDF subidos son hojas apiladas sobre la mesa; reordenarlas es mover papeles en la pila. Grapadora cartoon gigante con onomatopeya ¡CLACK! y grapa dibujada.', done: 'Hojas grapadas.' },
+      'dividir': { name: 'Dividir PDF', icon: '✂', level: 'ligera', t: 3, dropWhat: 'tu PDF', desc: 'Separa un PDF en varios archivos por páginas o rangos.', scene: 'Tijeras y línea punteada', ono: '✂ ¡RAS!', btn: 'Cortar por la línea punteada', during: 'El panda recorta con muchísimo cuidado…', duringArt: 'tijeras enormes siguiendo la línea ✂ - - - - entre rangos', art: '[ARTE · escena] Panda con tijeras enormes. Entre los rangos de páginas aparece la línea de recorte punteada «✂ - - - -». Si el rango es inválido, el panda se rasca la cabeza con el bocadillo de error real.', done: 'Recorte limpio.', opts: [{ id: 'modo', label: 'Modo de corte', type: 'choice', choices: ['Un PDF con la selección', 'Un PDF por rango'], def: 'Un PDF con la selección' }], t3Hint: 'las casillas se marcan con ✓ de marcador — el rango canónico lo produce el selector existente' },
+      'rotar': { name: 'Rotar PDF', icon: '90°', level: 'ligera', t: 2, dropWhat: 'tu PDF', desc: 'Gira las páginas de tu PDF y guárdalo con la orientación correcta.', scene: 'El panda tuerce el cuello', ono: '¡ÑIIIC!', btn: 'Girar páginas', during: 'El panda tuerce el cuello contigo…', duringArt: 'el panda inclina la cabeza el mismo ángulo elegido; a 180° se pone patas arriba', art: '[ARTE · escena] Perilla dibujada tipo dial de caja fuerte escolar (90/180/270). Al elegir un ángulo, el panda inclina la cabeza ese mismo ángulo; a 180° se pone literalmente de cabeza. La página de muestra gira como papel que se voltea.', done: 'Cuello (y páginas) en su sitio.', opts: [{ id: 'angulo', label: 'Ángulo de giro (perilla)', type: 'choice', choices: ['90°', '180°', '270°'], def: '90°', hint: 'el panda inclina la cabeza ese mismo ángulo' }] },
+      'organizar': { name: 'Organizar páginas', icon: '1↔3', level: 'media', t: 3, dropWhat: 'tu PDF', desc: 'Reordena, duplica o elimina páginas de tu documento.', scene: 'El tablón de corcho', ono: '¡PLOP!', btn: 'Guardar el nuevo orden', during: 'El panda despincha y repincha polaroids…', duringArt: 'panda cargando una caja de fotos, gotita de sudor; ordena la caja y la cierra', art: '[ARTE · escena] Las miniaturas (pdf.js) son polaroids sujetas con chinchetas a un corcho. Drag&drop = despinchar y repinchar. Marcar para eliminar = tacharla con X roja de marcador y arrugarla un poco.', done: 'Caja ordenada y cerrada.', t3Hint: 'demo: toca una polaroid para marcarla/desmarcarla — en la app real se arrastra para reordenar' },
+      'pdf-a-imagenes': { name: 'PDF a imágenes', icon: '→img', level: 'media', t: 3, dropWhat: 'tu PDF', desc: 'Convierte cada página de tu PDF en una imagen descargable.', scene: 'El panda fotógrafo', ono: '¡FLASH!', btn: 'Disparar la cámara', during: 'Revelando polaroids, no las agites…', duringArt: 'cada página procesada sale de la cámara instantánea como polaroid que se revela', art: '[ARTE · escena] Cámara instantánea cartoon: cada página «sale» como polaroid que se revela (el thumbnail aparece cuando el worker la termina). El ZIP final es una caja de zapatos etiquetada a mano.', done: 'Fotos en la caja de zapatos.', opts: [{ id: 'formato', label: 'Formato (ruedecita 1)', type: 'choice', choices: ['PNG', 'JPG'], def: 'PNG' }, { id: 'res', label: 'Resolución (ruedecita 2)', type: 'choice', choices: ['1×', '2×', '3×'], def: '2×' }], t3Hint: 'elige qué páginas se convierten en polaroid' },
+      'imagenes-a-pdf': { name: 'Imágenes a PDF', icon: '→pdf', level: 'ligera', t: 1, dropWhat: 'tus imágenes', desc: 'Reúne tus imágenes en un único PDF listo para compartir.', scene: 'Álbum de recortes', ono: '¡ZAS!', btn: 'Cerrar el álbum con moño', during: 'El panda pega tus fotos con cinta…', duringArt: 'el panda cierra el álbum y le pone un moño', art: '[ARTE · escena] Scrapbook: cada imagen subida es una foto pegada con cinta adhesiva en el cuaderno; reordenar = despegar y re-pegar. Imagen corrupta → foto con la cara del panda confundido y el mensaje real de error.', done: 'Álbum cerrado con moño.' },
+      'numeros': { name: 'Números de página', icon: '#1', level: 'ligera', t: 4, dropWhat: 'tu PDF', desc: 'Añade numeración con la posición y el formato que prefieras.', scene: 'El sello numerador', ono: '¡KA-CHUNK!', btn: 'Estampar números', during: 'KA-CHUNK, KA-CHUNK, KA-CHUNK…', duringArt: 'panda estampando cada esquina con un sello de oficina antigua', art: '[ARTE · escena] El panda con un sello numerador de oficina antigua. Elegir posición = tocar post-its en las esquinas/centros; al cambiar formato, estampa «KA-CHUNK» en la esquina elegida de la vista previa en vivo.', done: 'Todas las páginas selladas.', opts: [{ id: 'formato', label: 'Formato del sello', type: 'choice', choices: ['1', '1 / 12', 'Página 1'], def: '1' }], t4Note: 'Vista previa en vivo (componente existente): muestra una página real con los cambios antes de confirmar.', sheetHint: 'elige la posición con los post-its de la derecha' },
+      'marca-de-agua': { name: 'Marca de agua', icon: '≋', level: 'ligera', t: 4, dropWhat: 'tu PDF', desc: 'Superpón texto o imagen con opacidad y ángulo a tu gusto.', scene: 'El rodillo de pintura fantasma', ono: '~fssshh~', btn: 'Pasar el rodillo', during: 'El panda pasa el rodillo fantasma…', duringArt: 'panda pintor con gorra, entrecerrando los ojos para ver la marca casi invisible', art: '[ARTE · escena] Panda pintor con gorra y rodillo translúcido. Los sliders son reglas de escuela dibujadas; al bajar la opacidad, el panda entrecierra los ojos para verla. Texto vs imagen = pestañas tipo separadores de cuaderno.', done: 'Marca fantasma aplicada.', opts: [{ id: 'modo', label: 'Pestañas del cuaderno', type: 'choice', choices: ['Texto', 'Imagen'], def: 'Texto' }, { id: 'texto', label: 'Texto de la marca', type: 'text', def: 'CONFIDENCIAL', placeholder: 'escribe la marca…' }, { id: 'opacidad', label: 'Opacidad (regla de escuela)', type: 'range', min: 5, max: 90, def: 30, unit: '%' }, { id: 'angulo', label: 'Ángulo (regla de escuela)', type: 'range', min: -60, max: 60, def: -30, unit: '°' }], t4Note: 'La marca se desvanece en la vista previa según mueves la regla de opacidad.', sheetHint: 'mueve las reglas y mira cómo cambia la marca' },
+      'comprimir': { name: 'Comprimir PDF', icon: '→←', level: 'pesada', t: 2, dropWhat: 'tu PDF', desc: 'Reduce el tamaño recomprimiendo las imágenes del documento.', scene: 'La prensa panda', ono: '¡CRONCH!', btn: '¡Aplastar!', during: 'El panda se sienta con ganas…', duringArt: 'panda sentado / saltando / con yunque encima de la pila de papeles, según el nivel', art: '[ARTE · escena] El panda se sienta literalmente encima de una pila de papeles para aplastarla. Resultado en una balanza de dos platos manuscrita: tamaño antes vs después. Caso honesto: panda con los brazos arriba — «esto ya está flaco, no puedo hacer magia».', done: 'Pila aplastada.', opts: [{ id: 'nivel', label: 'Nivel de aplastado', type: 'choice', choices: ['Suave — panda sentado', 'Medio — panda saltando', 'Máximo — panda con yunque'], def: 'Medio — panda saltando' }] },
+      'proteger': { name: 'Proteger / desbloquear', icon: '•••', level: 'media', t: 2, dropWhat: 'tu PDF', desc: 'Cifra tu PDF con contraseña o quítala si la conoces.', scene: 'El candado del diario', ono: '¡CLIC!', btn: 'Cerrar el candado', during: 'El panda gira la rueda del candado con cara de concentración…', duringArt: 'candado de combinación dibujado; correcto = destello; incorrecto = el candado tiembla y el panda niega con el dedo', art: '[ARTE · escena] El PDF se mete dentro de un diario con candado de combinación dibujado. Contraseña incorrecta → el candado tiembla y el panda niega con el dedo (el mensaje de error real va en bocadillo de cómic).', done: 'Diario bajo llave.', note: 'tu contraseña jamás sale de este navegador, palabra de panda 🤝', opts: [{ id: 'modo', label: '¿Qué hacemos?', type: 'choice', choices: ['Proteger', 'Desbloquear'], def: 'Proteger' }, { id: 'clave', label: 'Contraseña (etiqueta colgante)', type: 'password', def: '', placeholder: 'escríbela aquí…' }] },
+      'firmar': { name: 'Firmar PDF', icon: '✗﹏', level: 'media', t: 4, dropWhat: 'tu PDF', desc: 'Dibuja o sube tu firma y colócala donde haga falta.', scene: 'El autógrafo', ono: '✗', btn: 'Colocar la firma', during: 'El panda sigue tu trazo con la mirada…', duringArt: 'pluma fuente gigante; el papelito de la firma se arrastra hasta su sitio', art: '[ARTE · escena] Recuadro «firma aquí ✗______» con una pluma fuente gigante. Colocar la firma en la vista previa = arrastrar un papelito.', done: 'Autógrafo colocado.', note: '* Firma visual, no certificada digitalmente (nota al pie manuscrita ya existente).', t4Note: 'Haz clic sobre la hoja para colocar el papelito de la firma.', sheetHint: 'clic en la hoja = colocar la firma ✗', click: 'firma' },
+      'rellenar': { name: 'Rellenar formularios', icon: '10/10', level: 'media', t: 4, dropWhat: 'tu PDF', desc: 'Detecta los campos del PDF y rellénalos sin imprimir nada.', scene: 'El examen escolar', ono: '10/10', btn: 'Entregar el examen', during: 'El panda estudiante rellena con lápiz…', duringArt: 'panda estudiante rellenando espacios en blanco mientras el usuario escribe', art: '[ARTE · escena] Los campos AcroForm detectados se listan como preguntas de examen con espacios subrayados. PDF sin campos → el panda encoge los hombros y ofrece el camino alternativo existente (texto encima).', done: 'Examen entregado.', note: '«Aplanar» = pasar el examen a tinta: ya no se puede borrar.', opts: [{ id: 'nombre', label: 'Pregunta 1 — Nombre', type: 'text', def: '', placeholder: '________' }, { id: 'fecha', label: 'Pregunta 2 — Fecha', type: 'text', def: '', placeholder: '________' }, { id: 'motivo', label: 'Pregunta 3 — Motivo', type: 'text', def: '', placeholder: '________' }, { id: 'tinta', label: 'Al entregar', type: 'choice', choices: ['Mantener editable', 'Aplanar (a tinta)'], def: 'Mantener editable' }], t4Note: 'La vista previa muestra el examen con tus respuestas en vivo.', sheetHint: 'escribe en las preguntas y aparece aquí' },
+      'redactar': { name: 'Redactar / ocultar', icon: '█▌', level: 'media', t: 4, dropWhat: 'tu PDF', desc: 'Oculta información sensible de forma permanente e irreversible.', scene: 'Expediente clasificado', ono: 'CLASIFICADO ✔', btn: 'Clasificar y exportar', during: 'El agente panda rasteriza las páginas marcadas…', duringArt: 'panda agente secreto (gafas oscuras, gabardina) pintando cajas de marcador grueso', art: '[ARTE · escena] Panda agente secreto con gafas oscuras y gabardina. Dibujas cajas negras de marcador grueso sobre la vista previa; al exportar, sello rojo inclinado «CLASIFICADO ✔». Aquí el humor baja un punto: el aviso de seguridad debe leerse claro.', done: 'Expediente clasificado.', t4Note: 'Haz clic sobre la hoja para dibujar cajas negras de redacción.', sheetHint: 'clic en la hoja = caja negra permanente', click: 'redact' },
+      'editar': { name: 'Editar / Anotar PDF', icon: '✎', level: 'pesada', t: 4, dropWhat: 'tu PDF', desc: 'Texto, resaltados, dibujos, formas e imágenes sobre tus páginas.', scene: 'El estuche completo', ono: '¡PSSSH!', btn: 'Planchar y exportar', during: 'El panda plancha las capas con su plancha cartoon…', duringArt: 'panda-artista con boina tomando cada útil escolar del estuche', art: '[ARTE · escena] La toolbar es un estuche de lápices abierto; cada herramienta es un útil escolar que el panda-artista (con boina) toma en la mano al seleccionarla.', done: 'Capas planchadas.', note: 'Nota del profesor al margen: se añade una capa de anotación, no se reescribe el texto original.', opts: [{ id: 'util', label: 'El estuche (elige un útil)', type: 'choice', choices: ['Texto', 'Resaltador', 'Lápiz', 'Formas', 'Imagen'], def: 'Texto' }], t4Note: 'Haz clic sobre la hoja para colocar el útil elegido.', sheetHint: 'clic en la hoja = añadir anotación del útil elegido', click: 'edit' },
+      'ocr': { name: 'OCR', icon: 'Aa?', level: 'pesada', t: 2, dropWhat: 'tu PDF escaneado', desc: 'Reconoce el texto de PDFs escaneados y hazlo buscable.', scene: 'El panda detective', ono: '¡AJÁ!', btn: '¡Elemental! Empezar OCR', during: 'La lupa recorre la página y las letras se iluminan…', duringArt: 'lupa gigante recorriendo la página; gorra de Sherlock hecha de papel; progreso real de Tesseract', art: '[ARTE · escena] Lupa gigante, gorra de Sherlock de papel. El progreso real de Tesseract se visualiza como la lupa recorriendo la página y las letras «iluminándose» a su paso. Selector de idioma = banderines de papel en un cordel.', done: '¡Elemental! Texto reconocido.', opts: [{ id: 'idioma', label: 'Idioma (banderines de papel)', type: 'choice', choices: ['Español', 'English', 'Français', 'Português'], def: 'Español' }, { id: 'salida', label: 'Salida', type: 'choice', choices: ['Solo texto', 'PDF buscable'], def: 'PDF buscable' }] }
+    };
+    this.FNAMES = ['apuntes-de-clase.pdf', 'contrato-final-FINAL(2).pdf', 'recetas-de-la-abuela.pdf', 'fotos-del-viaje.pdf'];
+    this.POS = [
+      { label: '↖', k: 'tl', st: { left: '14px', top: '10px' } }, { label: '↑', k: 'tc', st: { left: '50%', top: '10px', transform: 'translateX(-50%)' } }, { label: '↗', k: 'tr', st: { right: '14px', top: '10px' } },
+      { label: '↙', k: 'bl', st: { left: '14px', bottom: '10px' } }, { label: '↓', k: 'bc', st: { left: '50%', bottom: '10px', transform: 'translateX(-50%)' } }, { label: '↘', k: 'br', st: { right: '14px', bottom: '10px' } }
+    ];
+    this.state = Object.assign({ dark: false, previewOpen: false, previewPage: 1, previewName: '' }, this.freshFor(this.slugFromHash()));
+  }
+
+  slugFromHash() {
+    const s = (location.hash || '').replace('#', '');
+    return this.TOOLS[s] ? s : 'unir';
+  }
+  freshFor(slug) {
+    const cfg = this.TOOLS[slug];
+    const opts = {};
+    (cfg.opts || []).forEach(o => { opts[o.id] = o.def; });
+    return { slug, files: [], pages: Array.from({ length: 12 }, () => false), opts, marks: [], phase: 'idle', progress: 0, nextName: 0, pos: 'br' };
+  }
+  componentDidMount() {
+    try {
+      if (localStorage.getItem('cp-theme') === 'dark') { document.documentElement.classList.add('dark'); this.setState({ dark: true }); }
+    } catch (e) {}
+    this._onHash = () => {
+      clearInterval(this._proc);
+      this.setState(Object.assign({ previewOpen: false }, this.freshFor(this.slugFromHash())));
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener('hashchange', this._onHash);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('hashchange', this._onHash);
+    clearInterval(this._proc);
+  }
+
+  addDemoFile() {
+    this.setState(s => ({
+      files: s.files.concat([{ name: this.FNAMES[s.nextName % this.FNAMES.length], size: (1 + (s.nextName * 3) % 8) + ',' + ((s.nextName * 7) % 10) + ' MB', pages: 4 + (s.nextName * 5) % 14 }]),
+      nextName: s.nextName + 1
+    }));
+  }
+  start() {
+    if (this.state.files.length === 0) this.addDemoFile();
+    const rm = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const fast = this.props.demoRapida ?? false;
+    if (rm || fast) { this.setState({ phase: 'done', progress: 1 }); return; }
+    this.setState({ phase: 'processing', progress: 0 });
+    clearInterval(this._proc);
+    this._proc = setInterval(() => {
+      this.setState(s => {
+        const p = s.progress + 0.016 + Math.random() * 0.012;
+        if (p >= 1) { clearInterval(this._proc); return { progress: 1, phase: 'done' }; }
+        return { progress: p };
+      });
+    }, 50);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const cfg = this.TOOLS[s.slug];
+    const lv = this.LEVELS[cfg.level];
+    const isT4 = cfg.t === 4;
+    const clickMode = cfg.click || null;
+    const setOpt = (id, v) => this.setState(st => ({ opts: Object.assign({}, st.opts, { [id]: v }) }));
+
+    const optionViews = (cfg.opts || []).map(o => {
+      const val = s.opts[o.id];
+      const base = { label: o.label, hasHint: !!o.hint, hint: o.hint || '', isChoice: false, isSlider: false, isText: false };
+      if (o.type === 'choice') return Object.assign(base, {
+        isChoice: true,
+        choices: o.choices.map(c => ({ label: c, active: val === c, bg: val === c ? lv.hl : 'transparent', pick: () => setOpt(o.id, c) }))
+      });
+      if (o.type === 'range') return Object.assign(base, {
+        isSlider: true, min: o.min, max: o.max, value: val, display: val + (o.unit || ''),
+        slide: (e) => setOpt(o.id, Number(e.target.value))
+      });
+      return Object.assign(base, {
+        isText: true, value: val, inputType: o.type === 'password' ? 'password' : 'text',
+        placeholder: o.placeholder || '', type_: (e) => setOpt(o.id, e.target.value)
+      });
+    });
+
+    const fileViews = s.files.map((f, i) => ({
+      name: f.name, meta: f.size + ' · ' + f.pages + ' páginas',
+      rot: (i % 2 === 0 ? '-0.5deg' : '0.6deg'),
+      canReorder: cfg.t === 1,
+      up: () => this.setState(st => { const a = st.files.slice(); if (i > 0) { const t = a[i - 1]; a[i - 1] = a[i]; a[i] = t; } return { files: a }; }),
+      down: () => this.setState(st => { const a = st.files.slice(); if (i < a.length - 1) { const t = a[i + 1]; a[i + 1] = a[i]; a[i] = t; } return { files: a }; }),
+      remove: () => this.setState(st => ({ files: st.files.filter((_, j) => j !== i) })),
+      preview: () => this.setState({ previewOpen: true, previewPage: 1, previewName: f.name, previewTotal: f.pages })
+    }));
+
+    const pages = s.pages.map((sel, i) => ({
+      n: i + 1, sel, mark: sel ? '✓' : '',
+      bg: sel ? lv.hl : '#fff',
+      toggle: () => this.setState(st => { const a = st.pages.slice(); a[i] = !a[i]; return { pages: a }; })
+    }));
+    const selSet = (fn) => this.setState(st => ({ pages: st.pages.map((v, i) => fn(v, i)) }));
+    const selectedNums = s.pages.map((v, i) => v ? i + 1 : 0).filter(Boolean);
+    const rangeLabel = selectedNums.length ? selectedNums.join(',') : '—';
+
+    // t4 previews
+    const op = s.opts.opacidad ?? 30, ang = s.opts.angulo ?? -30;
+    const wmStyle = { position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%) rotate(' + ang + 'deg)', opacity: op / 100, fontFamily: "'Patrick Hand',cursive", fontSize: '34px', letterSpacing: '2px', color: '#4a6a8a', whiteSpace: 'nowrap', pointerEvents: 'none' };
+    const posDef = this.POS.find(p => p.k === s.pos) || this.POS[5];
+    const numStyle = Object.assign({ position: 'absolute', fontFamily: "'Patrick Hand',cursive", fontSize: '17px', color: '#2d2a26', border: '2px solid #2d2a26', borderRadius: '8px 5px 9px 4px', padding: '1px 8px', background: 'rgba(255,249,168,.8)', pointerEvents: 'none' }, posDef.st);
+    const posButtons = this.POS.map((p, i) => ({
+      label: p.label, active: s.pos === p.k,
+      bg: s.pos === p.k ? lv.hl : 'var(--postit)',
+      rot: (i % 2 === 0 ? '-2deg' : '2deg'),
+      pick: () => this.setState({ pos: p.k })
+    }));
+
+    const markViews = s.marks.map(m => {
+      const base = { position: 'absolute', left: m.x + '%', top: m.y + '%', transform: 'translate(-50%,-50%)', pointerEvents: 'none' };
+      if (m.kind === 'redact') return { label: '', style: Object.assign(base, { width: '30%', height: '7%', background: '#151412', borderRadius: '3px 6px 4px 7px', transform: 'translate(-50%,-50%) rotate(-1deg)' }) };
+      if (m.kind === 'firma') return { label: 'Firma ✗', style: Object.assign(base, { fontFamily: "'Gochi Hand',cursive", fontSize: '22px', color: '#1d3a8f', transform: 'translate(-50%,-50%) rotate(-4deg)' }) };
+      if (m.kind === 'Resaltador') return { label: '', style: Object.assign(base, { width: '34%', height: '5%', background: 'rgba(150,222,80,.6)', borderRadius: '4px' }) };
+      if (m.kind === 'Lápiz') return { label: '〰〰〰', style: Object.assign(base, { fontFamily: "'Gochi Hand',cursive", fontSize: '20px', color: '#555' }) };
+      if (m.kind === 'Formas') return { label: '', style: Object.assign(base, { width: '22%', height: '12%', border: '2.5px solid #d84438', borderRadius: '10px 6px 12px 5px/5px 12px 6px 10px', background: 'transparent' }) };
+      if (m.kind === 'Imagen') return { label: 'img', style: Object.assign(base, { width: '24%', height: '16%', border: '2.5px dashed #777', borderRadius: '6px', display: 'grid', placeItems: 'center', fontFamily: 'monospace', fontSize: '11px', color: '#777' }) };
+      return { label: 'Texto aquí', style: Object.assign(base, { fontFamily: "'Patrick Hand',cursive", fontSize: '16px', color: '#2d2a26', border: '2px dashed #999', borderRadius: '6px', padding: '2px 8px', background: '#fff' }) };
+    });
+
+    let actionLabel = cfg.btn;
+    if (s.slug === 'proteger' && s.opts.modo === 'Desbloquear') actionLabel = 'Abrir el candado';
+    let resultLine = '';
+    if (s.slug === 'comprimir') {
+      const map = { 'Suave — panda sentado': '8,4 MB → 6,7 MB', 'Medio — panda saltando': '8,4 MB → 4,9 MB', 'Máximo — panda con yunque': '8,4 MB → 3,1 MB' };
+      resultLine = 'Balanza: ' + (map[s.opts.nivel] || '') + '  (si no hubiera imágenes recomprimibles, el panda diría: «esto ya está flaco, no puedo hacer magia»)';
+    }
+    if (s.slug === 'ocr') resultLine = '«¡Elemental!» — texto reconocido en ' + (s.opts.idioma || 'Español');
+
+    return {
+      tool: {
+        name: cfg.name, icon: cfg.icon, desc: cfg.desc, hl: lv.hl,
+        levelWord: lv.word, frase: lv.frase, pose: lv.pose, levelHint: lv.hint,
+        isHeavy: cfg.level === 'pesada',
+        scene: cfg.scene, ono: cfg.ono, art: cfg.art, during: cfg.during, duringArt: cfg.duringArt,
+        hasNote: !!cfg.note, note: cfg.note || '', dropWhat: cfg.dropWhat
+      },
+      artKind: s.slug, poseKind: 'pose-' + cfg.level,
+      isT3: cfg.t === 3, isT4,
+      isMarca: s.slug === 'marca-de-agua', isNumeros: s.slug === 'numeros',
+      isFirmar: s.slug === 'firmar', isRedactar: s.slug === 'redactar',
+      isRellenar: s.slug === 'rellenar', isOcr: s.slug === 'ocr',
+      t3Hint: cfg.t3Hint || '', t4Note: cfg.t4Note || '',
+      sheetHint: cfg.sheetHint || '', sheetCursor: clickMode ? 'crosshair' : 'default',
+      hasOptions: optionViews.length > 0, optionViews,
+      hasFiles: fileViews.length > 0, fileViews,
+      addFile: () => this.addDemoFile(),
+      onDrop: (e) => { e.preventDefault(); this.addDemoFile(); },
+      onDragOver: (e) => e.preventDefault(),
+      pages, rangeLabel,
+      selAll: () => selSet(() => true), selNone: () => selSet(() => false),
+      selEven: () => selSet((_, i) => (i + 1) % 2 === 0), selOdd: () => selSet((_, i) => (i + 1) % 2 === 1),
+      selInvert: () => selSet(v => !v),
+      wmText: s.opts.texto || 'CONFIDENCIAL', wmStyle, numStyle, numLabel: (s.opts.formato === '1 / 12' ? '1 / 12' : s.opts.formato === 'Página 1' ? 'Página 1' : '1'), posButtons,
+      fNombre: s.opts.nombre || '·····', fFecha: s.opts.fecha || '·····', fMotivo: s.opts.motivo || '·····',
+      marks: markViews, hasMarks: s.marks.length > 0,
+      clearMarks: () => this.setState({ marks: [] }),
+      sheetClick: (e) => {
+        if (!clickMode) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        const x = ((e.clientX - r.left) / r.width) * 100, y = ((e.clientY - r.top) / r.height) * 100;
+        const kind = clickMode === 'edit' ? (s.opts.util || 'Texto') : clickMode === 'firma' ? 'firma' : 'redact';
+        this.setState(st => ({ marks: st.marks.concat([{ x, y, kind }]) }));
+      },
+      actionLabel,
+      isIdle: s.phase === 'idle', isProcessing: s.phase === 'processing', isDone: s.phase === 'done',
+      progressPct: Math.round(s.progress * 100) + '%', progressNum: Math.round(s.progress * 100),
+      start: () => this.start(),
+      reset: () => { clearInterval(this._proc); this.setState({ phase: 'idle', progress: 0, marks: [] }); },
+      doneLine: cfg.done, hasResultLine: !!resultLine, resultLine,
+      outName: s.slug + '-resultado.pdf',
+      previewOpen: s.previewOpen, previewName: s.previewName, previewPage: s.previewPage,
+      previewLabel: 'página ' + s.previewPage + ' de ' + (s.previewTotal || 12),
+      closePreview: () => this.setState({ previewOpen: false }),
+      stop: (e) => e.stopPropagation(),
+      prevPage: () => this.setState(st => ({ previewPage: Math.max(1, st.previewPage - 1) })),
+      nextPage: () => this.setState(st => ({ previewPage: Math.min(st.previewTotal || 12, st.previewPage + 1) })),
+      showPanda: this.props.showPanda ?? true,
+      themeLabel: s.dark ? 'modo cuaderno ☀' : 'modo pizarra ☾',
+      toggleTheme: () => {
+        const dark = !s.dark;
+        document.documentElement.classList.toggle('dark', dark);
+        try { localStorage.setItem('cp-theme', dark ? 'dark' : 'light'); } catch (e) {}
+        this.setState({ dark });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>
