@@ -17,7 +17,7 @@ const TRAINEDDATA_URLS = import.meta.glob(
 describe("ocr assets — datos de idioma empaquetados (#34 R2, R4)", () => {
   const urls = Object.values(TRAINEDDATA_URLS);
 
-  it("existe un .traineddata por cada idioma de OCR_LANGUAGES (R2)", () => {
+  it("existe un .traineddata por cada idioma de OCR_LANGUAGES (R2)", () => { 
     for (const lang of OCR_LANGUAGES) {
       const found = urls.some((url) => url.endsWith(`/${lang}.traineddata`));
       expect(found, `falta ${lang}.traineddata`).toBe(true);
